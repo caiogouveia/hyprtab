@@ -71,3 +71,7 @@ Na 0.57+ `hyprctl dispatch` aceita expressões Lua; foco e fechamento tentam o f
 - [x] Compila contra os headers reais do Hyprland 0.57.2
 - [ ] Compila contra 0.52 / 0.53 / 0.54 / 0.55 / 0.56 (em verificação)
 - [ ] Testado rodando em um Hyprland de verdade (ainda não: desenvolvido no macOS)
+
+## Licença
+
+[MIT](LICENSE)
