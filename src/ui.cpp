@@ -10,7 +10,9 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdint>
 #include <unordered_map>
+#include <vector>
 
 #ifdef HYPRTAB_NEW_RENDER
 using Tex = SP<Render::ITexture>;
@@ -22,6 +24,10 @@ namespace {
 
 // dimensões lógicas (px de layout); multiplicadas pela escala do monitor ao desenhar
 constexpr double ICON = 96, PAD = 14, GAP = 6, BARPAD = 18, TITLE_H = 34, RADIUS = 24, SEL_RADIUS = 18;
+// sombra projetada: alcance do blur e deslocamento vertical; alfa máximo do preto
+constexpr double SHADOW_RANGE = 44, SHADOW_DY = 12, SHADOW_A = 0.55;
+// fundo da barra: translúcido para o blur do compositor aparecer por trás
+constexpr double BAR_ALPHA = 0.55;
 
 std::vector<ui::Item> g_items;
 size_t                g_sel     = 0;
@@ -46,6 +52,15 @@ struct Label {
 Label& labelCache() {
     static auto* l = new Label();
     return *l;
+}
+
+struct Shadow {
+    int w = 0, h = 0, round = 0, range = 0;
+    Tex tex;
+};
+Shadow& shadowCache() {
+    static auto* s = new Shadow();
+    return *s;
 }
 
 struct Geom {
@@ -73,13 +88,13 @@ Tex makeTexture(cairo_surface_t* s) {
 #endif
 }
 
-void fillRect(const CBox& b, const CHyprColor& c, int round) {
+void fillRect(const CBox& b, const CHyprColor& c, int round, bool blur = false) {
 #if defined(HYPRTAB_RENDER_CTX)
-    HYPRTAB_GL->renderRect(*g_ctx, b, c, {.round = round});
+    HYPRTAB_GL->renderRect(*g_ctx, b, c, {.round = round, .blur = blur});
 #elif defined(HYPRTAB_NEW_RENDER)
-    HYPRTAB_GL->renderRect(b, c, {.round = round});
+    HYPRTAB_GL->renderRect(b, c, {.round = round, .blur = blur});
 #else
-    HYPRTAB_GL->renderRect(b, c, {.round = round});
+    HYPRTAB_GL->renderRect(b, c, {.round = round, .blur = blur});
 #endif
 }
 
@@ -148,6 +163,83 @@ Tex labelTexture(const std::string& text, int w, int h) {
     return l.tex;
 }
 
+// box blur separável (3 passadas ~ gaussiana) só no canal alfa; a sombra é preta, então
+// o ARGB pré-multiplicado se resume ao alfa.
+void boxBlurAlpha(std::vector<float>& a, int w, int h, int r) {
+    if (r < 1)
+        return;
+    std::vector<float> tmp(a.size());
+    auto pass = [&](bool horiz) {
+        const int  n = horiz ? w : h, lines = horiz ? h : w;
+        const float inv = 1.F / (2 * r + 1);
+        for (int l = 0; l < lines; l++) {
+            auto at = [&](int i) -> float {
+                i = std::clamp(i, 0, n - 1);
+                return horiz ? a[(size_t)l * w + i] : a[(size_t)i * w + l];
+            };
+            float acc = 0;
+            for (int i = -r; i <= r; i++)
+                acc += at(i);
+            for (int i = 0; i < n; i++) {
+                (horiz ? tmp[(size_t)l * w + i] : tmp[(size_t)i * w + l]) = acc * inv;
+                acc += at(i + r + 1) - at(i - r);
+            }
+        }
+        a.swap(tmp);
+    };
+    for (int k = 0; k < 3; k++) {
+        pass(true);
+        pass(false);
+    }
+}
+
+// textura da sombra: retângulo arredondado preto borrado, com margem de `range` px em volta.
+Tex shadowTexture(int bw, int bh, int round, int range) {
+    auto& c = shadowCache();
+    if (c.tex && c.w == bw && c.h == bh && c.round == round && c.range == range)
+        return c.tex;
+
+    const int W = bw + 2 * range, H = bh + 2 * range;
+    cairo_surface_t* m  = cairo_image_surface_create(CAIRO_FORMAT_A8, W, H);
+    cairo_t*         cr = cairo_create(m);
+    const double     r  = std::min<double>(round, std::min(bw, bh) / 2.0);
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, range + bw - r, range + r, r, -M_PI / 2, 0);
+    cairo_arc(cr, range + bw - r, range + bh - r, r, 0, M_PI / 2);
+    cairo_arc(cr, range + r, range + bh - r, r, M_PI / 2, M_PI);
+    cairo_arc(cr, range + r, range + r, r, M_PI, 3 * M_PI / 2);
+    cairo_close_path(cr);
+    cairo_set_source_rgba(cr, 0, 0, 0, 1);
+    cairo_fill(cr);
+    cairo_destroy(cr);
+    cairo_surface_flush(m);
+
+    std::vector<float> a((size_t)W * H);
+    const int          ms = cairo_image_surface_get_stride(m);
+    const auto*        md = cairo_image_surface_get_data(m);
+    for (int y = 0; y < H; y++)
+        for (int x = 0; x < W; x++)
+            a[(size_t)y * W + x] = md[(size_t)y * ms + x] / 255.F;
+    cairo_surface_destroy(m);
+
+    boxBlurAlpha(a, W, H, std::max(1, range / 5));
+
+    cairo_surface_t* s    = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, W, H);
+    const int        ss   = cairo_image_surface_get_stride(s);
+    auto*            sd   = cairo_image_surface_get_data(s);
+    for (int y = 0; y < H; y++) {
+        auto* row = reinterpret_cast<uint32_t*>(sd + (size_t)y * ss);
+        for (int x = 0; x < W; x++)
+            row[x] = (uint32_t)std::lround(std::clamp((double)a[(size_t)y * W + x] * SHADOW_A, 0.0, 1.0) * 255.0) << 24;
+    }
+    cairo_surface_mark_dirty(s);
+
+    c.w = bw; c.h = bh; c.round = round; c.range = range;
+    c.tex = makeTexture(s);
+    cairo_surface_destroy(s);
+    return c.tex;
+}
+
 // ---------- desenho ----------
 
 void draw(const PHLMONITOR& mon) {
@@ -158,7 +250,14 @@ void draw(const PHLMONITOR& mon) {
     const auto   g  = geometry(mon);
     auto         px = [&](double v) { return v * sc; };
 
-    fillRect(CBox{px(g.x), px(g.y), px(g.w), px(g.h)}, CHyprColor{0.08, 0.08, 0.10, 0.85}, (int)px(RADIUS * g.k));
+    {
+        const int range = std::max(4, (int)std::lround(px(SHADOW_RANGE * g.k)));
+        const int bw    = (int)std::lround(px(g.w)), bh = (int)std::lround(px(g.h));
+        drawTexture(shadowTexture(bw, bh, (int)px(RADIUS * g.k), range),
+                    CBox{px(g.x) - range, px(g.y + SHADOW_DY * g.k) - range, (double)bw + 2 * range, (double)bh + 2 * range});
+    }
+
+    fillRect(CBox{px(g.x), px(g.y), px(g.w), px(g.h)}, CHyprColor{0.08, 0.08, 0.10, BAR_ALPHA}, (int)px(RADIUS * g.k), true);
 
     const double cell = (ICON + 2 * PAD) * g.k;
     for (size_t i = 0; i < g_items.size(); i++) {

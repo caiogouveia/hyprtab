@@ -20,7 +20,7 @@
 <rect x="452" y="214" width="260" height="14" rx="5" fill="#b9bdcc"/><rect x="452" y="244" width="400" height="10" rx="5" fill="#d3d6e0"/><rect x="452" y="266" width="360" height="10" rx="5" fill="#d3d6e0"/><rect x="452" y="288" width="380" height="10" rx="5" fill="#d3d6e0"/>
 </g>
 <rect width="960" height="540" rx="14" fill="#000" opacity=".25"/>
-<rect x="140.0" y="163.0" width="680" height="194" rx="24" fill="#14141a" fill-opacity=".85" stroke="#fff" stroke-opacity=".08" filter="url(#shadow)"/>
+<rect x="140.0" y="163.0" width="680" height="194" rx="24" fill="#14141a" fill-opacity=".55" stroke="#fff" stroke-opacity=".08" filter="url(#shadow)"/>
 <rect x="172.0" y="195.0" width="96" height="96" rx="22" fill="#e5634d"/><rect x="172.0" y="195.0" width="96" height="96" rx="22" fill="url(#gloss)"/>
 <path d="M198.0 227.0 l20 16 l-20 16" fill="none" stroke="#fff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><path d="M226.0 261.0 h18" stroke="#fff" stroke-width="7" stroke-linecap="round"/>
 <rect x="288.0" y="181.0" width="124" height="124" rx="18" fill="#fff" fill-opacity=".22"/>
