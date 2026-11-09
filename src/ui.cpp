@@ -32,6 +32,10 @@ constexpr double RADIUS = 24, SEL_RADIUS = 18;
 constexpr double SHADOW_RANGE = 44, SHADOW_DY = 12, SHADOW_A = 0.55;
 // fundo da barra: translúcido para o blur do compositor aparecer por trás
 constexpr double BAR_ALPHA = 0.55;
+// borda dupla estilo macOS: traço escuro por fora (separa do fundo) e traço claro logo por dentro
+// (reflexo do vidro, mais forte no topo e suave nas laterais); um véu claro curto desce do topo
+constexpr double RIM_W = 1, OUTER_A = 0.45, INNER_TOP_A = 0.22, INNER_SIDE_A = 0.07, INNER_FADE = 0.35;
+constexpr double SHEEN_H = 22, SHEEN_A = 0.05;
 
 std::vector<ui::Item> g_items;
 size_t                g_sel     = 0;
@@ -235,6 +239,74 @@ Tex shadowTexture(int bw, int bh, int round, int range) {
     return c.tex;
 }
 
+// textura da borda dupla + véu, do tamanho da barra.
+struct Rim {
+    int w = 0, h = 0, round = 0, lw = 0, sheen = 0;
+    Tex tex;
+};
+Rim& rimCache() {
+    static auto* r = new Rim();
+    return *r;
+}
+
+// contorno arredondado recuado `inset` px para dentro do retângulo w×h
+void roundedPath(cairo_t* cr, double w, double h, double round, double inset) {
+    const double r = std::max(0.0, std::min(round, std::min(w, h) / 2.0) - inset);
+    cairo_new_sub_path(cr);
+    cairo_arc(cr, w - inset - r, inset + r, r, -M_PI / 2, 0);
+    cairo_arc(cr, w - inset - r, h - inset - r, r, 0, M_PI / 2);
+    cairo_arc(cr, inset + r, h - inset - r, r, M_PI / 2, M_PI);
+    cairo_arc(cr, inset + r, inset + r, r, M_PI, 3 * M_PI / 2);
+    cairo_close_path(cr);
+}
+
+Tex rimTexture(int bw, int bh, int round, int lw, int sheenPx) {
+    auto& c = rimCache();
+    if (c.tex && c.w == bw && c.h == bh && c.round == round && c.lw == lw && c.sheen == sheenPx)
+        return c.tex;
+
+    cairo_surface_t* s  = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, bw, bh);
+    cairo_t*         cr = cairo_create(s);
+    cairo_set_line_width(cr, lw);
+
+    // véu: degradê curto do topo para baixo, recortado pelo formato da barra
+    cairo_save(cr);
+    roundedPath(cr, bw, bh, round, 0);
+    cairo_clip(cr);
+    auto* sheen = cairo_pattern_create_linear(0, 0, 0, sheenPx);
+    cairo_pattern_add_color_stop_rgba(sheen, 0, 1, 1, 1, SHEEN_A);
+    cairo_pattern_add_color_stop_rgba(sheen, 1, 1, 1, 1, 0);
+    cairo_set_source(cr, sheen);
+    cairo_paint(cr);
+    cairo_pattern_destroy(sheen);
+    cairo_restore(cr);
+
+    // borda de fora: escura e uniforme, exatamente na beirada da barra
+    roundedPath(cr, bw, bh, round, lw / 2.0);
+    cairo_set_source_rgba(cr, 0, 0, 0, OUTER_A);
+    cairo_stroke(cr);
+
+    // borda de dentro: clara, colada na de fora; forte no topo e some logo depois dos cantos
+    roundedPath(cr, bw, bh, round, lw * 1.5);
+    const double corner = std::min(1.0, (double)round / bh);
+    auto*        inner  = cairo_pattern_create_linear(0, 0, 0, bh);
+    cairo_pattern_add_color_stop_rgba(inner, 0, 1, 1, 1, INNER_TOP_A);
+    cairo_pattern_add_color_stop_rgba(inner, corner, 1, 1, 1, INNER_TOP_A * 0.6);
+    cairo_pattern_add_color_stop_rgba(inner, std::max(corner, INNER_FADE), 1, 1, 1, INNER_SIDE_A);
+    cairo_pattern_add_color_stop_rgba(inner, 1, 1, 1, 1, INNER_SIDE_A * 0.5);
+    cairo_set_source(cr, inner);
+    cairo_stroke(cr);
+    cairo_pattern_destroy(inner);
+
+    cairo_destroy(cr);
+    cairo_surface_flush(s);
+
+    c.w = bw; c.h = bh; c.round = round; c.lw = lw; c.sheen = sheenPx;
+    c.tex = makeTexture(s);
+    cairo_surface_destroy(s);
+    return c.tex;
+}
+
 // ---------- desenho ----------
 
 void draw(const PHLMONITOR& mon) {
@@ -253,6 +325,10 @@ void draw(const PHLMONITOR& mon) {
     }
 
     fillRect(CBox{px(g.x), px(g.y), px(g.w), px(g.h)}, CHyprColor{0.08, 0.08, 0.10, BAR_ALPHA}, (int)px(RADIUS * g.k), true);
+    {
+        const int bw = (int)std::lround(px(g.w)), bh = (int)std::lround(px(g.h));
+        drawTexture(rimTexture(bw, bh, (int)px(RADIUS * g.k), std::max(1, (int)std::lround(px(RIM_W))), std::max(1, (int)std::lround(px(SHEEN_H * g.k)))), CBox{px(g.x), px(g.y), (double)bw, (double)bh});
+    }
 
     for (size_t i = 0; i < g_items.size(); i++) {
         const auto [cx, cy, cs] = cell(g, i);

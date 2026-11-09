@@ -1,6 +1,6 @@
 # hyprtab
 
-<p align="center"><img src="docs/preview.png" alt="Prévia do switcher do hyprtab" width="801"></p>
+<p align="center"><img src="docs/preview.png" alt="Prévia do switcher do hyprtab" width="783"></p>
 
 Alt+Tab estilo macOS para o Hyprland, em **um único plugin `.so`** (C++). Pensado para **0.52 até 0.57+**; só a 0.57 foi compilada até agora (veja [Status](#status)).
 
