@@ -17,7 +17,6 @@
 
 // códigos evdev e de botão
 static constexpr uint32_t KEY_ESC_   = 1;
-static constexpr uint32_t KEY_Q_     = 16;
 static constexpr uint32_t KEY_ENTER_ = 28;
 static constexpr uint32_t KEY_LALT_  = 56;
 static constexpr uint32_t KEY_RALT_  = 100;
@@ -252,20 +251,6 @@ void cancel() {
         finish();
 }
 
-void closeSelected() {
-    auto w = selected();
-    if (!w)
-        return;
-    dispatch(std::format("closewindow address:{}", addr(w)), std::format("hl.dsp.window.close({{ window = 'address:{}' }})", addr(w)));
-    g_session.erase(g_session.begin() + g_index);
-    if (g_session.size() < 2) {
-        cancel();
-        return;
-    }
-    g_index %= g_session.size();
-    ui::setItems(buildItems(), g_index);
-}
-
 // retorna true se a tecla deve ser consumida
 bool handleKey(const IKeyboard::SKeyEvent& ev) {
     if (!g_active)
@@ -282,7 +267,6 @@ bool handleKey(const IKeyboard::SKeyEvent& ev) {
 
     switch (ev.keycode) {
         case KEY_ESC_: cancel(); return true;
-        case KEY_Q_: closeSelected(); return true;
         case KEY_LEFT_: step(-1); return true;
         case KEY_RIGHT_: step(+1); return true;
         case KEY_ENTER_: commit(); return true;

@@ -246,12 +246,6 @@ void show(std::vector<Item> items, size_t selected) {
     damage();
 }
 
-void setItems(std::vector<Item> items, size_t selected) {
-    g_items = std::move(items);
-    g_sel   = selected;
-    damage();
-}
-
 void select(size_t selected) {
     if (selected == g_sel)
         return;

@@ -18,8 +18,6 @@ jobs:
         include:
           # a versão mais recente do Hyprland no Arch (verificada)
           - { label: latest, date: "",           experimental: false }
-          # snapshot do Arch Archive; ainda sem compilação confirmada
-          - { label: "0.52", date: "2025/11/08", experimental: true }
     steps:
       - name: Dependências
         run: |
@@ -33,7 +31,14 @@ jobs:
 
       - name: Versão do Hyprland
         id: hl
-        run: echo "version=$(pkg-config --modversion hyprland)" | tee -a "$GITHUB_OUTPUT"
+        run: |
+          v="$(pkg-config --modversion hyprland)"
+          echo "version=$v" | tee -a "$GITHUB_OUTPUT"
+          # protege contra snapshot com a versão errada
+          if [ "${{ matrix.label }}" != "latest" ] && [ "${v#${{ matrix.label }}.}" = "$v" ]; then
+            echo "::error::esperava Hyprland ${{ matrix.label }}.x, instalou $v (ajuste a data do snapshot)"
+            exit 1
+          fi
 
       - name: Compilar
         run: make

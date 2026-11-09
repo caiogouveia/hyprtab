@@ -1,6 +1,6 @@
 # hyprtab
 
-Alt+Tab estilo macOS para o Hyprland, em **um único plugin `.so`** (C++). Compatível com **0.52 até 0.57+**.
+Alt+Tab estilo macOS para o Hyprland, em **um único plugin `.so`** (C++). Pensado para **0.52 até 0.57+**; só a 0.57 foi compilada até agora (veja [Status](#status)).
 
 - Alt+Tab / Alt+Shift+Tab alternam entre as janelas por uso recente (MRU).
 - Barra central com os ícones dos apps, desenhada pelo próprio compositor.
@@ -13,7 +13,6 @@ Alt+Tab estilo macOS para o Hyprland, em **um único plugin `.so`** (C++). Compa
 | `←` / `→` | move a seleção |
 | `Enter` ou soltar `Alt` | confirma |
 | `Esc` | cancela |
-| `Q` | fecha a janela selecionada |
 | mover o mouse sobre um ícone | seleciona (só depois que o mouse realmente se mexe; a barra costuma abrir debaixo do cursor) |
 | clique esquerdo num ícone | confirma aquele app |
 | clique fora da barra | cancela |
@@ -57,7 +56,7 @@ A API de plugins do Hyprland mudou bastante entre 0.52 e 0.57. As diferenças s�
 | 0.55–0.56  | `Event::bus()`            | `addDispatcherV2` (+ Lua)     | `ITexture` + `createTexture(cairo)`   |
 | 0.57+      | `Event::bus()`            | `addLuaFunction` (config Lua) | `renderRect(ctx, box, …)`             |
 
-Na 0.57+ `hyprctl dispatch` aceita expressões Lua; foco e fechamento tentam o formato legado e depois o Lua. Classe e título das janelas vêm de `hyprctl clients -j`, que é estável entre versões.
+Na 0.57+ `hyprctl dispatch` aceita expressões Lua; o foco tenta o formato legado e depois o Lua. Classe e título das janelas vêm de `hyprctl clients -j`, que é estável entre versões.
 
 ## Estrutura
 
@@ -69,7 +68,7 @@ Na 0.57+ `hyprctl dispatch` aceita expressões Lua; foco e fechamento tentam o f
 ## Status
 
 - [x] Compila contra os headers reais do Hyprland 0.57.2
-- [ ] Compila contra 0.52 / 0.53 / 0.54 / 0.55 / 0.56 (em verificação)
+- [ ] 0.52 – 0.56: o código tem ramos para elas (lidos dos headers), mas **nunca foram compilados**
 - [ ] Testado rodando em um Hyprland de verdade (ainda não: desenvolvido no macOS)
 
 ## Licença

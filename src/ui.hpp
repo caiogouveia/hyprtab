@@ -17,7 +17,6 @@ void init();     // registra o hook de render
 void shutdown();
 
 void show(std::vector<Item> items, size_t selected);
-void setItems(std::vector<Item> items, size_t selected); // atualiza sem reabrir
 void select(size_t selected);
 void hide();
 bool visible();
