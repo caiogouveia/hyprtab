@@ -18,12 +18,8 @@ jobs:
         include:
           # a versão mais recente do Hyprland no Arch (verificada)
           - { label: latest, date: "",           experimental: false }
-          # snapshots do Arch Archive; ainda sem compilação confirmada
+          # snapshot do Arch Archive; ainda sem compilação confirmada
           - { label: "0.52", date: "2025/11/08", experimental: true }
-          - { label: "0.53", date: "2026/02/04", experimental: true }
-          - { label: "0.54", date: "2026/03/31", experimental: true }
-          - { label: "0.55", date: "2026/06/12", experimental: true }
-          - { label: "0.56", date: "2026/08/06", experimental: true }
     steps:
       - name: Dependências
         run: |
