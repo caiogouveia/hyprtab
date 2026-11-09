@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:  # reaproveitado pelo release.yml
+
+jobs:
+  build:
+    name: Hyprland ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    container: archlinux:latest
+    continue-on-error: ${{ matrix.experimental }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # a versão mais recente do Hyprland no Arch (verificada)
+          - { label: latest, date: "",           experimental: false }
+          # snapshots do Arch Archive; ainda sem compilação confirmada
+          - { label: "0.52", date: "2025/11/08", experimental: true }
+          - { label: "0.53", date: "2026/02/04", experimental: true }
+          - { label: "0.54", date: "2026/03/31", experimental: true }
+          - { label: "0.55", date: "2026/06/12", experimental: true }
+          - { label: "0.56", date: "2026/08/06", experimental: true }
+    steps:
+      - name: Dependências
+        run: |
+          if [ -n "${{ matrix.date }}" ]; then
+            echo 'Server = https://archive.archlinux.org/repos/${{ matrix.date }}/$repo/os/$arch' > /etc/pacman.d/mirrorlist
+          fi
+          pacman --disable-download-timeout -Syyuu --noconfirm --needed \
+            git hyprland base-devel cairo pango pkgconf librsvg
+
+      - uses: actions/checkout@v4
+
+      - name: Versão do Hyprland
+        id: hl
+        run: echo "version=$(pkg-config --modversion hyprland)" | tee -a "$GITHUB_OUTPUT"
+
+      - name: Compilar
+        run: make
+
+      - name: Conferir símbolos de plugin
+        run: nm -D --defined-only hyprtab.so | grep -iE 'plugin(Init|Exit|APIVersion)'
+
+      - name: Empacotar
+        run: |
+          mkdir -p dist
+          cp hyprtab.so "dist/hyprtab-hyprland${{ steps.hl.outputs.version }}.so"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: hyprtab-${{ matrix.label }}
+          path: dist/*.so
+          if-no-files-found: error
