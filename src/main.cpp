@@ -9,8 +9,11 @@
 #include "clients.hpp"
 #include "ui.hpp"
 
+#include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
+
 #include <algorithm>
 #include <any>
+#include <chrono>
 #include <format>
 #include <string>
 #include <unordered_map>
@@ -18,12 +21,20 @@
 
 // códigos evdev e de botão
 static constexpr uint32_t KEY_ESC_   = 1;
+static constexpr uint32_t KEY_TAB_   = 15;
+static constexpr uint32_t KEY_LSHIFT_ = 42;
+static constexpr uint32_t KEY_RSHIFT_ = 54;
 static constexpr uint32_t KEY_ENTER_ = 28;
 static constexpr uint32_t KEY_LALT_  = 56;
 static constexpr uint32_t KEY_RALT_  = 100;
 static constexpr uint32_t KEY_LEFT_  = 105;
 static constexpr uint32_t KEY_RIGHT_ = 106;
 static constexpr uint32_t BTN_LEFT_  = 0x110;
+
+// Tab segurado com o switcher aberto: atraso até começar a repetir e intervalo entre passos.
+// Mais lento que o repeat do teclado de propósito (50/s daria voltas demais na barra).
+static constexpr auto REPEAT_DELAY = std::chrono::milliseconds(150);
+static constexpr auto REPEAT_EVERY = std::chrono::milliseconds(30);
 
 namespace {
 
@@ -37,6 +48,11 @@ bool     g_haveAnchor   = false;
 Vector2D g_anchor       = {};
 bool     g_moved        = false;
 bool     g_swallowClick = false; // engole o release do clique que já consumimos
+
+// repetição do Tab: o bind dá o primeiro passo; o timer dá os seguintes enquanto o Tab estiver preso
+bool                 g_tabHeld   = false;
+bool                 g_shiftHeld = false;
+SP<CEventLoopTimer>  g_repeat;
 
 // ---------- util ----------
 
@@ -140,12 +156,45 @@ void cancel() {
         finish();
 }
 
+// acompanha Tab/Shift mesmo com o switcher fechado: o Tab que abre o switcher já arma a repetição
+void trackRepeat(uint32_t keycode, bool pressed) {
+    if (keycode == KEY_LSHIFT_ || keycode == KEY_RSHIFT_)
+        g_shiftHeld = pressed;
+    if (keycode != KEY_TAB_ || !g_repeat)
+        return;
+    g_tabHeld = pressed;
+    if (pressed)
+        g_repeat->updateTimeout(REPEAT_DELAY);
+    else
+        g_repeat->updateTimeout(std::nullopt);
+}
+
+void onRepeat(SP<CEventLoopTimer> self, void*) {
+    if (!g_active || !g_tabHeld)
+        return;
+    step(g_shiftHeld ? -1 : +1);
+    self->updateTimeout(REPEAT_EVERY);
+}
+
+void registerRepeat() {
+    g_repeat = makeShared<CEventLoopTimer>(std::nullopt, onRepeat, nullptr);
+    g_pEventLoopManager->addTimer(g_repeat);
+}
+
+void unregisterRepeat() {
+    if (!g_repeat)
+        return;
+    g_pEventLoopManager->removeTimer(g_repeat);
+    g_repeat.reset();
+}
+
 // retorna true se a tecla deve ser consumida
 bool handleKey(const IKeyboard::SKeyEvent& ev) {
+    const bool pressed = ev.state == WL_KEYBOARD_KEY_STATE_PRESSED;
+    trackRepeat(ev.keycode, pressed);
+
     if (!g_active)
         return false;
-
-    const bool pressed = ev.state == WL_KEYBOARD_KEY_STATE_PRESSED;
 
     if (!pressed && (ev.keycode == KEY_LALT_ || ev.keycode == KEY_RALT_)) {
         commit(); // não consome: o Alt solto precisa chegar ao sistema
@@ -340,6 +389,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     registerDispatchers();
     registerEvents();
+    registerRepeat();
     ui::init();
     // janelas que já existiam antes do load entram no MRU (ordem do compositor); a focada vai pra frente
     for (auto& w : g_pCompositor->m_windows)
@@ -353,5 +403,6 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 APICALL EXPORT void PLUGIN_EXIT() {
     cancel();
     unregisterEvents();
+    unregisterRepeat();
     ui::shutdown();
 }
