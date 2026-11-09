@@ -4,6 +4,7 @@
 
 #include "ui.hpp"
 #include "icons.hpp"
+#include "layout.hpp"
 
 #include <drm_fourcc.h>
 #include <pango/pangocairo.h>
@@ -17,13 +18,16 @@
 #ifdef HYPRTAB_NEW_RENDER
 using Tex = SP<Render::ITexture>;
 #else
+#include <hyprland/src/render/pass/RectPassElement.hpp>
+#include <hyprland/src/render/pass/TexPassElement.hpp>
 using Tex = SP<CTexture>;
 #endif
 
 namespace {
 
 // dimensões lógicas (px de layout); multiplicadas pela escala do monitor ao desenhar
-constexpr double ICON = 96, PAD = 14, GAP = 6, BARPAD = 18, TITLE_H = 34, RADIUS = 24, SEL_RADIUS = 18;
+using namespace layout;
+constexpr double RADIUS = 24, SEL_RADIUS = 18;
 // sombra projetada: alcance do blur e deslocamento vertical; alfa máximo do preto
 constexpr double SHADOW_RANGE = 44, SHADOW_DY = 12, SHADOW_A = 0.55;
 // fundo da barra: translúcido para o blur do compositor aparecer por trás
@@ -63,18 +67,8 @@ Shadow& shadowCache() {
     return *s;
 }
 
-struct Geom {
-    double x, y, w, h; // barra, em coords lógicas locais ao monitor
-    double k;          // fator de redução quando há muitas janelas
-};
-
 Geom geometry(const PHLMONITOR& mon) {
-    const double n    = (double)std::max<size_t>(g_items.size(), 1);
-    const double cell = ICON + 2 * PAD;
-    const double w    = n * cell + (n - 1) * GAP + 2 * BARPAD;
-    const double h    = cell + TITLE_H + 2 * BARPAD;
-    const double k    = std::min(1.0, (mon->m_size.x - 80) / w);
-    return {(mon->m_size.x - w * k) / 2, (mon->m_size.y - h * k) / 2, w * k, h * k, k};
+    return layout::geometry(g_items.size(), mon->m_size.x, mon->m_size.y);
 }
 
 // ---------- API de render, por era ----------
@@ -94,7 +88,8 @@ void fillRect(const CBox& b, const CHyprColor& c, int round, bool blur = false) 
 #elif defined(HYPRTAB_NEW_RENDER)
     HYPRTAB_GL->renderRect(b, c, {.round = round, .blur = blur});
 #else
-    HYPRTAB_GL->renderRect(b, c, {.round = round, .blur = blur});
+    // <= 0.53: a render pass só é desenhada depois do hook; GL direto ficaria por baixo das janelas
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CRectPassElement>(CRectPassElement::SRectData{.box = b, .color = c, .round = round, .blur = blur}));
 #endif
 }
 
@@ -104,7 +99,7 @@ void drawTexture(const Tex& t, const CBox& b) {
 #elif defined(HYPRTAB_NEW_RENDER)
     HYPRTAB_GL->renderTexture(t, b, {.a = 1.F});
 #else
-    HYPRTAB_GL->renderTexture(t, b, {.a = 1.F});
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(CTexPassElement::SRenderData{.tex = t, .box = b, .a = 1.F}));
 #endif
 }
 
@@ -259,13 +254,11 @@ void draw(const PHLMONITOR& mon) {
 
     fillRect(CBox{px(g.x), px(g.y), px(g.w), px(g.h)}, CHyprColor{0.08, 0.08, 0.10, BAR_ALPHA}, (int)px(RADIUS * g.k), true);
 
-    const double cell = (ICON + 2 * PAD) * g.k;
     for (size_t i = 0; i < g_items.size(); i++) {
-        const double cx = g.x + BARPAD * g.k + (double)i * (cell + GAP * g.k);
-        const double cy = g.y + BARPAD * g.k;
+        const auto [cx, cy, cs] = cell(g, i);
 
         if (i == g_sel)
-            fillRect(CBox{px(cx), px(cy), px(cell), px(cell)}, CHyprColor{1, 1, 1, 0.22}, (int)px(SEL_RADIUS * g.k));
+            fillRect(CBox{px(cx), px(cy), px(cs), px(cs)}, CHyprColor{1, 1, 1, 0.22}, (int)px(SEL_RADIUS * g.k));
 
         const int iconPx = std::max(16, (int)std::lround(px(ICON * g.k)));
         drawTexture(iconTexture(g_items[i].cls, iconPx), CBox{px(cx + PAD * g.k), px(cy + PAD * g.k), (double)iconPx, (double)iconPx});
@@ -366,20 +359,7 @@ int hit(const Vector2D& global) {
     if (!g_visible || !mon || g_items.empty())
         return -2;
 
-    const auto   g  = geometry(mon);
-    const double lx = global.x - mon->m_position.x;
-    const double ly = global.y - mon->m_position.y;
-    if (lx < g.x || lx > g.x + g.w || ly < g.y || ly > g.y + g.h)
-        return -2;
-
-    const double cell = (ICON + 2 * PAD) * g.k;
-    for (size_t i = 0; i < g_items.size(); i++) {
-        const double cx = g.x + BARPAD * g.k + (double)i * (cell + GAP * g.k);
-        const double cy = g.y + BARPAD * g.k;
-        if (lx >= cx && lx <= cx + cell && ly >= cy && ly <= cy + cell)
-            return (int)i;
-    }
-    return -1;
+    return layout::hit(geometry(mon), g_items.size(), global.x - mon->m_position.x, global.y - mon->m_position.y);
 }
 
 } // namespace ui

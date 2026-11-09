@@ -8,5 +8,12 @@ all:
 	$(CXX) -shared -fPIC --no-gnu-unique src/*.cpp -o hyprtab.so -g -std=c++2b $(CXXFLAGS_EXTRA) \
 		`pkg-config --cflags $(PKGS)`
 
+# testes das partes sem dependência do Hyprland (parser do hyprctl, geometria da barra)
+test:
+	$(CXX) -std=c++2b -g -Wall -Wextra -fsanitize=address,undefined -D_GLIBCXX_ASSERTIONS tests/test.cpp src/clients.cpp src/layout.cpp -o tests/run
+	./tests/run
+
 clean:
-	rm -f ./hyprtab.so
+	rm -f ./hyprtab.so ./tests/run
+
+.PHONY: all test clean

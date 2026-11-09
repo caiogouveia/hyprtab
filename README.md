@@ -66,6 +66,9 @@ Na 0.57+ `hyprctl dispatch` aceita expressões Lua; o foco tenta o formato legad
 - `src/ui.cpp`: layout, desenho, cache de texturas e hit-test (a parte que muda por versão do renderer).
 - `src/icons.cpp`: classe da janela → `.desktop` → arquivo de ícone → surface cairo (sem dependência do Hyprland).
 - `src/compat.hpp`: detecção da era do Hyprland.
+- `src/clients.cpp`: parser da saída de `hyprctl clients -j` (sem dependência do Hyprland).
+- `src/layout.cpp`: geometria da barra e hit-test em px lógicos (sem dependência do Hyprland).
+- `tests/test.cpp`: testes do parser e do layout, com ASan/UBSan: `make test`.
 
 ## Status
 

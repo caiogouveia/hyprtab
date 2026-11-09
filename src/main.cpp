@@ -6,6 +6,7 @@
 //   >= 0.57 : addDispatcherV2 virou no-op; dispatchers pela config Lua (addLuaFunction)
 
 #include "compat.hpp"
+#include "clients.hpp"
 #include "ui.hpp"
 
 #include <algorithm>
@@ -54,120 +55,8 @@ void dispatch(const std::string& legacy, const std::string& lua) {
 
 // ---------- classe/título via `hyprctl clients -j` (estável entre versões) ----------
 
-struct Json {
-    const std::string& s;
-    size_t             i = 0;
-
-    void ws() {
-        while (i < s.size() && (s[i] == ' ' || s[i] == '\n' || s[i] == '\t' || s[i] == '\r'))
-            i++;
-    }
-    std::string str() { // assume s[i] == '"'
-        std::string out;
-        i++;
-        while (i < s.size() && s[i] != '"') {
-            if (s[i] == '\\' && i + 1 < s.size()) {
-                i++;
-                switch (s[i]) {
-                    case 'n': out += '\n'; break;
-                    case 't': out += '\t'; break;
-                    case 'u': // \uXXXX: mantém ASCII, troca o resto
-                        out += (i + 4 < s.size() && std::stoi(s.substr(i + 1, 4), nullptr, 16) < 128) ? (char)std::stoi(s.substr(i + 1, 4), nullptr, 16) : '?';
-                        i += 4;
-                        break;
-                    default: out += s[i];
-                }
-            } else
-                out += s[i];
-            i++;
-        }
-        i++; // fecha aspas
-        return out;
-    }
-    void skip() { // pula um valor qualquer
-        ws();
-        if (i >= s.size())
-            return;
-        if (s[i] == '"') {
-            str();
-        } else if (s[i] == '{' || s[i] == '[') {
-            const char open = s[i], close = open == '{' ? '}' : ']';
-            i++;
-            ws();
-            if (s[i] == close) {
-                i++;
-                return;
-            }
-            for (;;) {
-                if (open == '{') {
-                    ws();
-                    str();
-                    ws();
-                    i++; // ':'
-                }
-                skip();
-                ws();
-                if (s[i] == ',') {
-                    i++;
-                    continue;
-                }
-                i++; // fecha
-                return;
-            }
-        } else {
-            while (i < s.size() && s[i] != ',' && s[i] != '}' && s[i] != ']')
-                i++;
-        }
-    }
-};
-
-// endereço -> {classe, título}
-std::unordered_map<std::string, std::pair<std::string, std::string>> fetchClients() {
-    std::unordered_map<std::string, std::pair<std::string, std::string>> out;
-    const auto                                                          js = HyprlandAPI::invokeHyprctlCommand("clients", "", "j");
-    Json                                                                p{js};
-    p.ws();
-    if (p.i >= js.size() || js[p.i] != '[')
-        return out;
-    p.i++;
-    for (;;) {
-        p.ws();
-        if (p.i >= js.size() || js[p.i] == ']')
-            break;
-        if (js[p.i] == ',') {
-            p.i++;
-            continue;
-        }
-        if (js[p.i] != '{') {
-            p.skip();
-            continue;
-        }
-        p.i++;
-        std::string a, c, t;
-        for (;;) {
-            p.ws();
-            if (p.i >= js.size() || js[p.i] == '}') {
-                p.i++;
-                break;
-            }
-            if (js[p.i] == ',') {
-                p.i++;
-                continue;
-            }
-            const auto key = p.str();
-            p.ws();
-            p.i++; // ':'
-            p.ws();
-            if (p.i < js.size() && js[p.i] == '"' && (key == "address" || key == "class" || key == "title")) {
-                auto v = p.str();
-                (key == "address" ? a : key == "class" ? c : t) = v;
-            } else
-                p.skip();
-        }
-        if (!a.empty())
-            out[a] = {c, t};
-    }
-    return out;
+Clients fetchClients() {
+    return parseClients(HyprlandAPI::invokeHyprctlCommand("clients", "", "j"));
 }
 
 std::vector<ui::Item> buildItems() {
@@ -322,14 +211,17 @@ int luaPrev(auto*) {
 // <= 0.56: dispatchers clássicos (bind = ALT, TAB, hyprtab:next).
 // >= 0.57: addDispatcherV2 virou no-op; usa addLuaFunction (existe desde a 0.55).
 // O `requires` dentro de lambda genérica deixa compilar nas versões sem addLuaFunction.
+// A chamada tem de ser não qualificada (via using namespace): `HyprlandAPI::addLuaFunction`
+// é procurado já na definição e dá erro onde não existe; com argumento dependente, só na instanciação.
 void registerDispatchers() {
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtab:next", dispNext);
     HyprlandAPI::addDispatcherV2(PHANDLE, "hyprtab:prev", dispPrev);
 
     [](auto h) {
-        if constexpr (requires { HyprlandAPI::addLuaFunction(h, "hyprtab", "next", luaNext); }) {
-            HyprlandAPI::addLuaFunction(h, "hyprtab", "next", luaNext);
-            HyprlandAPI::addLuaFunction(h, "hyprtab", "prev", luaPrev);
+        using namespace HyprlandAPI;
+        if constexpr (requires { addLuaFunction(h, "hyprtab", "next", luaNext); }) {
+            addLuaFunction(h, "hyprtab", "next", luaNext);
+            addLuaFunction(h, "hyprtab", "prev", luaPrev);
         }
     }(PHANDLE);
 }
@@ -449,6 +341,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     registerDispatchers();
     registerEvents();
     ui::init();
+    // janelas que já existiam antes do load entram no MRU (ordem do compositor); a focada vai pra frente
+    for (auto& w : g_pCompositor->m_windows)
+        if (hyprtabMapped(w))
+            g_mru.push_back(w);
     touch(currentFocus());
 
     return {"hyprtab", "Alt+Tab estilo macOS", "caio", "0.3.0"};

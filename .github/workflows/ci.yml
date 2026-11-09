@@ -43,6 +43,9 @@ jobs:
       - name: Compilar
         run: make
 
+      - name: Testes
+        run: make test
+
       - name: Conferir símbolos de plugin
         run: nm -D --defined-only hyprtab.so | grep -iE 'plugin(Init|Exit|APIVersion)'
 
