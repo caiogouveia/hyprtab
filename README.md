@@ -73,8 +73,12 @@ Na 0.57+ `hyprctl dispatch` aceita expressões Lua; o foco tenta o formato legad
 ## Status
 
 - [x] Compila contra os headers reais do Hyprland 0.57.2
-- [ ] 0.52 – 0.56: o código tem ramos para elas (lidos dos headers), mas **nunca foram compilados**
-- [ ] Testado rodando em um Hyprland de verdade (ainda não: desenvolvido no macOS)
+- [x] Compila e roda no Hyprland 0.53.3 (Ubuntu 26.04)
+- [ ] 0.52, 0.54 – 0.56: o código tem ramos para elas (lidos dos headers), mas **nunca foram compilados**
+
+## Feito com IA
+
+Este projeto foi desenvolvido com a ajuda de IA ([Claude Code](https://claude.com/claude-code)): código, correções, testes e documentação foram escritos em conjunto com o assistente e revisados e testados por um humano num Hyprland de verdade.
 
 ## Licença
 
