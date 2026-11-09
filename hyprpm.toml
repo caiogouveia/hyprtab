@@ -1,0 +1,10 @@
+[repository]
+name = "hyprtab"
+authors = ["caio"]
+commit_pins = []
+
+[hyprtab]
+description = "Alt+Tab estilo macOS para o Hyprland"
+authors = ["caio"]
+output = "hyprtab.so"
+build = ["make all"]

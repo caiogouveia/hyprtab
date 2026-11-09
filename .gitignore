@@ -1,0 +1,20 @@
+# build
+hyprtab.so
+*.so
+*.o
+*.d
+
+# debug
+*.dSYM/
+core
+core.*
+
+# editores / SO
+.DS_Store
+.idea/
+.vscode/
+*.swp
+*~
+
+# Claude Code (config local)
+.claude/settings.local.json
