@@ -1,5 +1,7 @@
 # hyprtab
 
+<p align="center"><img src="docs/preview.svg" alt="Prévia do switcher do hyprtab" width="760"></p>
+
 Alt+Tab estilo macOS para o Hyprland, em **um único plugin `.so`** (C++). Pensado para **0.52 até 0.57+**; só a 0.57 foi compilada até agora (veja [Status](#status)).
 
 - Alt+Tab / Alt+Shift+Tab alternam entre as janelas por uso recente (MRU).
