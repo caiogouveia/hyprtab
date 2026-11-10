@@ -31,7 +31,7 @@ static constexpr uint32_t KEY_LEFT_  = 105;
 static constexpr uint32_t KEY_RIGHT_ = 106;
 static constexpr uint32_t BTN_LEFT_  = 0x110;
 
-// Tab segurado com o switcher aberto: atraso até começar a repetir e intervalo entre passos.
+// Tab ou seta segurada com o switcher aberto: atraso até começar a repetir e intervalo entre passos.
 // Mais lento que o repeat do teclado de propósito (50/s daria voltas demais na barra).
 static constexpr auto REPEAT_DELAY = std::chrono::milliseconds(150);
 static constexpr auto REPEAT_EVERY = std::chrono::milliseconds(30);
@@ -49,8 +49,9 @@ Vector2D g_anchor       = {};
 bool     g_moved        = false;
 bool     g_swallowClick = false; // engole o release do clique que já consumimos
 
-// repetição do Tab: o bind dá o primeiro passo; o timer dá os seguintes enquanto o Tab estiver preso
-bool                 g_tabHeld   = false;
+// repetição de tecla presa (Tab, ← e →): o primeiro passo vem do bind (Tab) ou do handleKey
+// (setas); o timer dá os seguintes enquanto a tecla continuar presa
+uint32_t             g_heldKey   = 0; // 0: nenhuma
 bool                 g_shiftHeld = false;
 SP<CEventLoopTimer>  g_repeat;
 
@@ -156,23 +157,29 @@ void cancel() {
         finish();
 }
 
-// acompanha Tab/Shift mesmo com o switcher fechado: o Tab que abre o switcher já arma a repetição
+// acompanha as teclas mesmo com o switcher fechado: o Tab que abre o switcher já arma a repetição.
+// As setas só contam com o switcher aberto (fora dele são do app em foco).
 void trackRepeat(uint32_t keycode, bool pressed) {
     if (keycode == KEY_LSHIFT_ || keycode == KEY_RSHIFT_)
         g_shiftHeld = pressed;
-    if (keycode != KEY_TAB_ || !g_repeat)
+    if ((keycode != KEY_TAB_ && keycode != KEY_LEFT_ && keycode != KEY_RIGHT_) || !g_repeat)
         return;
-    g_tabHeld = pressed;
-    if (pressed)
+    if (pressed) {
+        if (keycode != KEY_TAB_ && !g_active)
+            return;
+        g_heldKey = keycode;
         g_repeat->updateTimeout(REPEAT_DELAY);
-    else
+    } else if (keycode == g_heldKey) { // soltar outra tecla não interrompe a que ainda está presa
+        g_heldKey = 0;
         g_repeat->updateTimeout(std::nullopt);
+    }
 }
 
 void onRepeat(SP<CEventLoopTimer> self, void*) {
-    if (!g_active || !g_tabHeld)
+    if (!g_active || !g_heldKey)
         return;
-    step(g_shiftHeld ? -1 : +1);
+    const int dir = g_heldKey == KEY_LEFT_ ? -1 : g_heldKey == KEY_RIGHT_ ? +1 : g_shiftHeld ? -1 : +1;
+    step(dir);
     self->updateTimeout(REPEAT_EVERY);
 }
 

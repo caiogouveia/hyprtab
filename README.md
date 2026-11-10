@@ -12,7 +12,9 @@ Alt+Tab estilo macOS para o Hyprland, em **um único plugin `.so`** (C++). Pensa
 
 | Ação | Efeito |
 |---|---|
+| `Tab` / `Shift+Tab` | avança / volta a seleção |
 | `←` / `→` | move a seleção |
+| segurar `Tab`, `←` ou `→` | repete o movimento enquanto a tecla estiver presa |
 | `Enter` ou soltar `Alt` | confirma |
 | `Esc` | cancela |
 | mover o mouse sobre um ícone | seleciona (só depois que o mouse realmente se mexe; a barra costuma abrir debaixo do cursor) |
