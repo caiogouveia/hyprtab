@@ -58,16 +58,7 @@ SP<CEventLoopTimer>  g_repeat;
 // ---------- util ----------
 
 std::string addr(const PHLWINDOW& w) {
-    return std::format("0x{:x}", (uintptr_t)w.get());
-}
-
-// `hyprctl dispatch` muda de sintaxe: hyprlang usa "focuswindow address:X";
-// com config Lua (0.57+) a string vira hl.dispatch(<expressão Lua>).
-// Tenta o formato legado e, se não deu "ok", o Lua. O formato errado só gera erro inofensivo.
-void dispatch(const std::string& legacy, const std::string& lua) {
-    const auto r = HyprlandAPI::invokeHyprctlCommand("dispatch", legacy);
-    if (!r.starts_with("ok"))
-        HyprlandAPI::invokeHyprctlCommand("dispatch", lua);
+    return hyprtabAddr(w);
 }
 
 // ---------- classe/título via `hyprctl clients -j` (estável entre versões) ----------
@@ -149,7 +140,7 @@ void commit() {
     auto w = selected();
     finish();
     if (w)
-        dispatch(std::format("focuswindow address:{}", addr(w)), std::format("hl.dsp.focus({{ window = 'address:{}' }})", addr(w)));
+        hyprtabFocus(addr(w));
 }
 
 void cancel() {
@@ -377,14 +368,6 @@ void unregisterEvents() {
 }
 #endif
 
-PHLWINDOW currentFocus() {
-#ifdef HYPRTAB_FOCUS_STATE
-    return Desktop::focusState()->window();
-#else
-    return g_pCompositor->m_lastWindow.lock();
-#endif
-}
-
 } // namespace
 
 APICALL EXPORT std::string PLUGIN_API_VERSION() {
@@ -402,7 +385,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     for (auto& w : hyprtabWindows())
         if (hyprtabMapped(w))
             g_mru.push_back(w);
-    touch(currentFocus());
+    touch(hyprtabFocusedWindow());
 
     return {"hyprtab", "Alt+Tab estilo macOS", "caio", "0.3.0"};
 }

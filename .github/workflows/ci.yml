@@ -46,13 +46,24 @@ jobs:
       - name: Testes
         run: make test
 
+      - name: Compilar dock
+        run: make -C dock
+
+      - name: Testes dock
+        run: make -C dock test
+
       - name: Conferir símbolos de plugin
-        run: nm -D --defined-only hyprtab.so | grep -iE 'plugin(Init|Exit|APIVersion)'
+        run: |
+          for so in hyprtab.so dock/hyprdock.so; do
+            echo "$so"
+            nm -D --defined-only "$so" | grep -iE 'plugin(Init|Exit|APIVersion)'
+          done
 
       - name: Empacotar
         run: |
           mkdir -p dist
           cp hyprtab.so "dist/hyprtab-hyprland${{ steps.hl.outputs.version }}.so"
+          cp dock/hyprdock.so "dist/hyprdock-hyprland${{ steps.hl.outputs.version }}.so"
 
       - uses: actions/upload-artifact@v4
         with:

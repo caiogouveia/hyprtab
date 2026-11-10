@@ -24,10 +24,10 @@ std::string lower(std::string s) {
     return s;
 }
 
-// classe (minúscula) -> valor de Icon= do .desktop. Indexado uma vez.
-const std::unordered_map<std::string, std::string>& desktopIndex() {
+// classe (minúscula) -> dados do .desktop. Indexado uma vez.
+const std::unordered_map<std::string, icons::DesktopEntry>& desktopIndex() {
     static const auto idx = [] {
-        std::unordered_map<std::string, std::string> m;
+        std::unordered_map<std::string, icons::DesktopEntry> m;
         std::vector<fs::path>                        dirs = {"/usr/share/applications", "/usr/local/share/applications",
                                                              "/var/lib/flatpak/exports/share/applications"};
         if (const char* home = getenv("HOME")) {
@@ -39,22 +39,34 @@ const std::unordered_map<std::string, std::string>& desktopIndex() {
             for (auto& e : fs::directory_iterator(d, ec)) {
                 if (e.path().extension() != ".desktop")
                     continue;
-                std::ifstream f(e.path());
-                std::string   line, icon, wm;
+                std::ifstream        f(e.path());
+                std::string          line, wm;
+                icons::DesktopEntry  de;
+                bool                 main = false; // só a seção [Desktop Entry]; as [Desktop Action] vêm depois
                 while (std::getline(f, line)) {
-                    if (line.rfind("Icon=", 0) == 0 && icon.empty())
-                        icon = line.substr(5);
-                    else if (line.rfind("StartupWMClass=", 0) == 0)
+                    if (line.starts_with('[')) {
+                        main = line.starts_with("[Desktop Entry]");
+                        continue;
+                    }
+                    if (!main)
+                        continue;
+                    if (line.starts_with("Icon=") && de.icon.empty())
+                        de.icon = line.substr(5);
+                    else if (line.starts_with("Exec=") && de.exec.empty())
+                        de.exec = line.substr(5);
+                    else if (line.starts_with("Name=") && de.name.empty())
+                        de.name = line.substr(5);
+                    else if (line.starts_with("StartupWMClass="))
                         wm = line.substr(15);
                 }
-                if (icon.empty())
+                if (de.icon.empty() && de.exec.empty())
                     continue;
                 const auto stem = lower(e.path().stem().string());
                 if (!wm.empty())
-                    m.emplace(lower(wm), icon);
-                m.emplace(stem, icon);
+                    m.emplace(lower(wm), de);
+                m.emplace(stem, de);
                 if (auto dot = stem.rfind('.'); dot != std::string::npos)
-                    m.emplace(stem.substr(dot + 1), icon);
+                    m.emplace(stem.substr(dot + 1), de);
             }
         }
         return m;
@@ -180,8 +192,8 @@ cairo_surface_t* load(const std::string& windowClass, int px) {
 
     const auto key = lower(windowClass);
     std::string name = key;
-    if (auto it = desktopIndex().find(key); it != desktopIndex().end())
-        name = it->second;
+    if (auto it = desktopIndex().find(key); it != desktopIndex().end() && !it->second.icon.empty())
+        name = it->second.icon;
 
     bool ok = false;
     if (const auto file = findFile(name); !file.empty())
@@ -192,6 +204,11 @@ cairo_surface_t* load(const std::string& windowClass, int px) {
     cairo_destroy(cr);
     cairo_surface_flush(surf);
     return surf;
+}
+
+const DesktopEntry* desktopEntry(const std::string& windowClass) {
+    const auto it = desktopIndex().find(lower(windowClass));
+    return it == desktopIndex().end() ? nullptr : &it->second;
 }
 
 } // namespace icons

@@ -8,3 +8,9 @@ description = "Alt+Tab estilo macOS para o Hyprland"
 authors = ["caio"]
 output = "hyprtab.so"
 build = ["make all"]
+
+[hyprdock]
+description = "Dock estilo macOS para o Hyprland"
+authors = ["caio"]
+output = "dock/hyprdock.so"
+build = ["make -C dock all"]

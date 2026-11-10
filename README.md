@@ -8,6 +8,8 @@ Alt+Tab estilo macOS para o Hyprland, em **um único plugin `.so`** (C++). Pensa
 - Barra central com os ícones dos apps, desenhada pelo próprio compositor.
 - Soltar o Alt confirma.
 
+No mesmo repositório: **[hyprdock](dock/README.md)**, uma dock estilo macOS com o mesmo visual.
+
 ## Teclas e mouse (com o switcher aberto)
 
 | Ação | Efeito |
@@ -65,12 +67,14 @@ Na 0.57+ `hyprctl dispatch` aceita expressões Lua; o foco tenta o formato legad
 ## Estrutura
 
 - `src/main.cpp`: MRU, teclado, mouse, dispatchers e foco.
-- `src/ui.cpp`: layout, desenho, cache de texturas e hit-test (a parte que muda por versão do renderer).
-- `src/icons.cpp`: classe da janela → `.desktop` → arquivo de ícone → surface cairo (sem dependência do Hyprland).
-- `src/compat.hpp`: detecção da era do Hyprland.
+- `src/ui.cpp`: barra do switcher (usa `render.cpp`).
+- `src/icons.cpp`: classe da janela → `.desktop` → arquivo de ícone → surface cairo; também nome e `Exec=` do `.desktop` (sem dependência do Hyprland).
+- `src/compat.hpp`: detecção da era do Hyprland e helpers comuns (foco, dispatch, lista de janelas).
+- `src/render.cpp`: desenho no compositor (texturas, painel de vidro, hook de render por versão), usado também pela dock.
 - `src/clients.cpp`: parser da saída de `hyprctl clients -j` (sem dependência do Hyprland).
 - `src/layout.cpp`: geometria da barra e hit-test em px lógicos (sem dependência do Hyprland).
 - `tests/test.cpp`: testes do parser e do layout, com ASan/UBSan: `make test`.
+- `dock/`: o hyprdock (ver [dock/README.md](dock/README.md)).
 
 ## Status
 
