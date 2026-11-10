@@ -5,6 +5,7 @@
 //   HYPRTAB_FOCUS_STATE  >= 0.53  Desktop::focusState()
 //   HYPRTAB_NEW_RENDER   >= 0.55  ITexture + g_pHyprRenderer->createTexture(cairo)
 //   HYPRTAB_RENDER_CTX   >= 0.57  renderRect/renderTexture recebem CRenderContext&
+//   HYPRTAB_WINDOW_STATE >= 0.57  lista de janelas em Desktop::windowState() (saiu do CCompositor)
 
 #define WLR_USE_UNSTABLE
 
@@ -39,6 +40,11 @@
 
 #include <hyprland/src/Compositor.hpp>
 
+#if __has_include(<hyprland/src/desktop/state/WindowState.hpp>)
+#include <hyprland/src/desktop/state/WindowState.hpp>
+#define HYPRTAB_WINDOW_STATE 1
+#endif
+
 #include <hyprland/src/render/Renderer.hpp>
 #include <hyprland/src/render/OpenGL.hpp>
 #include <hyprland/src/render/Texture.hpp>
@@ -70,4 +76,13 @@ inline bool hyprtabMapped(const W& w) {
         return w->mapped();
     else
         return w->m_isMapped;
+}
+
+// todas as janelas do compositor
+inline const std::vector<PHLWINDOW>& hyprtabWindows() {
+#ifdef HYPRTAB_WINDOW_STATE
+    return Desktop::windowState()->windows();
+#else
+    return g_pCompositor->m_windows;
+#endif
 }

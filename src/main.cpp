@@ -399,7 +399,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     registerRepeat();
     ui::init();
     // janelas que já existiam antes do load entram no MRU (ordem do compositor); a focada vai pra frente
-    for (auto& w : g_pCompositor->m_windows)
+    for (auto& w : hyprtabWindows())
         if (hyprtabMapped(w))
             g_mru.push_back(w);
     touch(currentFocus());
