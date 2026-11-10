@@ -140,6 +140,15 @@ struct Frame {
 Box  toScreen(const Frame& f, const Box& b);                       // espaço da dock -> monitor
 void toDock(const Frame& f, double sx, double sy, double& dx, double& dy); // monitor -> espaço da dock
 
+// ---------- entrada ----------
+// Ao carregar (ou trocar de borda) a dock entra deslizando de fora da tela: começa `distance` px para
+// fora (além da borda) e chega ao lugar com uma desaceleração que passa um pouco do ponto e assenta.
+
+constexpr double ENTER_MS = 520, ENTER_OVERSHOOT = 1.2; // duração; intensidade do "passar do ponto"
+
+// deslocamento para fora (px, no espaço da dock: y maior = em direção à borda) `ms` após o início
+double enterOffset(double ms, double distance);
+
 // ---------- puff ao remover ----------
 // Soltar um fixo longe da dock: o ícone encolhe e some enquanto uma nuvem de fumaça se espalha do
 // ponto. São partículas macias (texturas de nuvem, ver render) com direção, velocidade, tamanho,

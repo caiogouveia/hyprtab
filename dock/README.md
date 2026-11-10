@@ -3,12 +3,14 @@
 Dock estilo macOS para o Hyprland, em **um único plugin `.so`** (C++), com o mesmo visual de vidro do [hyprtab](../README.md): fundo translúcido com blur, sombra e borda dupla.
 
 - Embaixo, na esquerda ou na direita da tela (`position`).
+- Entra deslizando da borda ao iniciar (e ao trocar de borda).
 - Reserva a faixa da dock, como uma barra: as janelas não ficam por baixo dela (`reserve`).
 - Apps fixos pela config, seguidos dos apps abertos.
 - Bolinha embaixo de cada app aberto.
 - Zoom estilo macOS: os ícones perto do mouse crescem para cima, com animação de entrada e saída. O ícone sob o mouse não foge dele: a dock se abre para os lados a partir do cursor.
 - Mouse em cima: tooltip com o nome do app (do `.desktop`).
 - Clique: foca o app; clicando de novo, passa pelas janelas dele. Se não estiver aberto, abre (`Exec=` do `.desktop`).
+- O ícone pula enquanto o app abre pela dock, e duas vezes quando um app aberto por fora (lançador, terminal) aparece.
 - Some quando o workspace tem janela em tela cheia.
 - Arrastar um app fixo reordena os fixos (a ordem fica salva). Arrastar para longe da dock e soltar remove dos fixos (aberto, ele continua na dock como app aberto). `Esc` cancela no meio do arraste.
 - Botão direito num app: menu com **Fechar** (todas as janelas do app), **Maximizar**, **Minimizar** e **Fixar na Dock / Remover da Dock**. Se o app não está aberto: **Abrir** e fixar/remover. `Esc`, um clique fora ou o botão direito de novo fecham o menu.

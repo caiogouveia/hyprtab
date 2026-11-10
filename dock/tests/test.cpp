@@ -414,6 +414,26 @@ static void testDragOutside() {
     CHECK(!dock::dragOutside(g, g.x - 5, g.y + 5));             // logo ao lado: ainda reordena
 }
 
+// ---------- entrada ----------
+
+static void testEnter() {
+    const double d = 100;
+    CHECK(near(dock::enterOffset(0, d), d));             // começa escondida além da borda
+    CHECK(near(dock::enterOffset(-5, d), d));
+    CHECK(near(dock::enterOffset(dock::ENTER_MS, d), 0)); // termina no lugar
+    CHECK(near(dock::enterOffset(dock::ENTER_MS * 3, d), 0));
+    // anda rápido no começo, devagar no fim
+    CHECK(d - dock::enterOffset(dock::ENTER_MS * 0.2, d) > 40);
+    // passa um pouco do ponto (deslocamento negativo) e volta, sem exagero
+    double minOff = 0;
+    for (double ms = 0; ms <= dock::ENTER_MS; ms += 2) {
+        const double o = dock::enterOffset(ms, d);
+        minOff         = std::min(minOff, o);
+        CHECK(o <= d + 1e-9);
+    }
+    CHECK(minOff < 0 && minOff > -0.15 * d);
+}
+
 // ---------- puff ----------
 
 static void testPoof() {
@@ -480,6 +500,7 @@ int main() {
     testDragSlot();
     testDragOutside();
     testPoof();
+    testEnter();
 
     std::printf("%d/%d checagens ok\n", g_checks - g_fails, g_checks);
     return g_fails ? 1 : 0;

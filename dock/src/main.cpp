@@ -83,6 +83,11 @@ struct Drag {
     Vector2D      local;           // cursor no monitor (px lógicos), para desenhar o ícone solto
 } g_drag;
 
+// entrada: a dock desliza de fora da borda ao carregar e ao trocar de borda (ver dock::enterOffset)
+bool                                  g_entering     = false;
+bool                                  g_enterPending = false; // o relógio só começa no primeiro quadro desenhado
+std::chrono::steady_clock::time_point g_enterStart;
+
 // puffs de fumaça de ícones removidos arrastando para fora (ver dock::poofPuffs)
 struct Poof {
     PHLMONITORREF                         mon;
@@ -148,6 +153,7 @@ double elapsedMs(const Bounce& b) {
 }
 
 void kickAnim();
+void startEnter();
 void syncReserve();
 void animateTo(double target);
 bool updateZoom(const Vector2D& pos);
@@ -483,6 +489,7 @@ void closeMenu() {
 void onPoll(SP<CEventLoopTimer> self, void*) {
     // mudou de borda: a dock sai de um lugar e aparece em outro, redesenha o monitor todo
     if (loadConfig()) {
+        startEnter(); // entra pela borda nova
         for (auto& p : g_placed)
             if (auto m = p.mon.lock())
                 g_pHyprRenderer->damageMonitor(m);
@@ -528,9 +535,21 @@ void draw(const PHLMONITOR& mon) {
     const size_t n   = g_items.size();
     const double cs  = g.icon + 2 * dock::PAD * g.k; // célula sem zoom
     auto         px  = [&](double v) { return v * sc; };
+    // textura no tamanho máximo do zoom; nos tamanhos intermediários a GPU só reduz
+    const int texPx = std::max(16, (int)std::lround(px(g.icon * mag)));
+    // entrando: o primeiro quadro carrega os ícones (disco, pode levar centenas de ms) antes de o relógio
+    // começar; senão a animação já estaria no fim quando a dock aparecesse
+    if (g_enterPending) {
+        for (auto& it : g_items)
+            render::iconTexture(it.cls, texPx);
+        g_enterStart   = std::chrono::steady_clock::now();
+        g_enterPending = false;
+    }
+    // entrando: tudo deslocado para fora da borda (com folga para a sombra), voltando ao lugar
+    const double enter = g_entering ? dock::enterOffset(msSince(g_enterStart), f.h() - g.y + 64 * g.k) : 0;
     // caixa no espaço da dock -> caixa no monitor (px físicos)
     auto scr = [&](double x, double y, double w, double h) {
-        const auto b = dock::toScreen(f, {x, y, w, h});
+        const auto b = dock::toScreen(f, {x, y + enter, w, h});
         return CBox{px(b.x), px(b.y), px(b.w), px(b.h)};
     };
     g_placed.push_back({mon, g, f});
@@ -548,8 +567,6 @@ void draw(const PHLMONITOR& mon) {
     if (!(detached && n == 1)) // o único item saiu: não sobra dock
         render::glassPanel(scr(l.panel.x, l.panel.y, l.panel.w, l.panel.h), (int)px(RADIUS * g.k), sc, g.k);
 
-    // textura no tamanho máximo do zoom; nos tamanhos intermediários a GPU só reduz
-    const int texPx = std::max(16, (int)std::lround(px(g.icon * mag)));
     for (size_t i = 0; i < n; i++) {
         if (dragging && i == g_drag.from)
             continue;
@@ -750,8 +767,20 @@ void onAnim(SP<CEventLoopTimer> self, void*) {
         }
     std::erase_if(g_poofs, [](const Poof& p) { return msSince(p.start) >= dock::POOF_MS; });
 
-    if (g_level != g_levelTo || !g_bouncing.empty() || !g_poofs.empty())
+    if (g_entering) {
+        damageAll(); // nos primeiros quadros a dock ainda não foi posicionada: redesenha o monitor
+        if (!g_enterPending && msSince(g_enterStart) >= dock::ENTER_MS)
+            g_entering = false;
+    }
+
+    if (g_level != g_levelTo || !g_bouncing.empty() || !g_poofs.empty() || g_entering)
         self->updateTimeout(ANIM_FRAME);
+}
+
+void startEnter() {
+    g_entering     = true;
+    g_enterPending = true;
+    kickAnim();
 }
 
 void kickAnim() {
@@ -1038,6 +1067,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     installReserve();
     syncReserve();
+    startEnter();
 
     return {"hyprdock", "Dock estilo macOS", "caio", "0.1.0"};
 }

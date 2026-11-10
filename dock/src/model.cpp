@@ -371,6 +371,19 @@ void toDock(const Frame& f, double sx, double sy, double& dx, double& dy) {
     }
 }
 
+// ---------- entrada ----------
+
+double enterOffset(double ms, double distance) {
+    if (ms <= 0)
+        return distance;
+    if (ms >= ENTER_MS)
+        return 0;
+    // easeOutBack: chega a 1 passando um pouco (o deslocamento fica levemente negativo) e volta
+    const double t = ms / ENTER_MS - 1, c = ENTER_OVERSHOOT;
+    const double e = 1 + (c + 1) * t * t * t + c * t * t;
+    return distance * (1 - e);
+}
+
 // ---------- puff ----------
 
 namespace {
