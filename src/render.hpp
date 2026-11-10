@@ -17,7 +17,7 @@ using Tex = SP<CTexture>;
 
 Tex  makeTexture(cairo_surface_t* s);
 void fillRect(const CBox& b, const CHyprColor& c, int round, bool blur = false);
-void drawTexture(const Tex& t, const CBox& b);
+void drawTexture(const Tex& t, const CBox& b, float alpha = 1.F);
 
 // texturas com cache (vivem até o fim do processo: destruir textura GL exige o contexto ativo)
 Tex iconTexture(const std::string& cls, int px);

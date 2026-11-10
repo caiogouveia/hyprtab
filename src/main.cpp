@@ -67,8 +67,23 @@ Clients fetchClients() {
     return parseClients(HyprlandAPI::invokeHyprctlCommand("clients", "", "j"));
 }
 
+Clients g_clients; // classe/título das janelas, lidos ao abrir o switcher
+
+// classes fora do switcher: as auxiliares padrão + `plugin:hyprtab:ignore` (lista, `*` no começo/fim)
+std::vector<std::string> ignoreList() {
+    auto list = DEFAULT_IGNORE;
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations" // 0.57 marca a API hyprlang como deprecated
+    if (auto* v = HyprlandAPI::getConfigValue(PHANDLE, "plugin:hyprtab:ignore"))
+        if (auto str = *(Hyprlang::STRING const*)v->getDataStaticPtr())
+            for (auto& p : splitList(str))
+                list.push_back(p);
+#pragma GCC diagnostic pop
+    return list;
+}
+
 std::vector<ui::Item> buildItems() {
-    const auto            clients = fetchClients();
+    const auto&           clients = g_clients;
     std::vector<ui::Item> items;
     for (auto& r : g_session) {
         auto w = r.lock();
@@ -106,6 +121,14 @@ PHLWINDOW selected() {
 void begin() {
     pruneMru();
     g_session = g_mru;
+    // janelas auxiliares (seletor de compartilhar tela, portais...) não entram no Alt+Tab
+    g_clients          = fetchClients();
+    const auto ignore = ignoreList();
+    std::erase_if(g_session, [&](const PHLWINDOWREF& r) {
+        auto       w = r.lock();
+        const auto c = w ? g_clients.find(addr(w)) : g_clients.end();
+        return c != g_clients.end() && classIgnored(c->second.first, ignore);
+    });
     if (g_session.size() < 2)
         return;
     g_active       = true;
@@ -377,6 +400,10 @@ APICALL EXPORT std::string PLUGIN_API_VERSION() {
 APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     PHANDLE = handle;
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wdeprecated-declarations"
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprtab:ignore", Hyprlang::STRING{""});
+#pragma GCC diagnostic pop
     registerDispatchers();
     registerEvents();
     registerRepeat();

@@ -266,13 +266,13 @@ void fillRect(const CBox& b, const CHyprColor& c, int round, bool blur) {
 #endif
 }
 
-void drawTexture(const Tex& t, const CBox& b) {
+void drawTexture(const Tex& t, const CBox& b, float alpha) {
 #if defined(HYPRTAB_RENDER_CTX)
-    HYPRTAB_GL->renderTexture(*g_ctx, t, b, {.a = 1.F});
+    HYPRTAB_GL->renderTexture(*g_ctx, t, b, {.a = alpha});
 #elif defined(HYPRTAB_NEW_RENDER)
-    HYPRTAB_GL->renderTexture(t, b, {.a = 1.F});
+    HYPRTAB_GL->renderTexture(t, b, {.a = alpha});
 #else
-    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(CTexPassElement::SRenderData{.tex = t, .box = b, .a = 1.F}));
+    g_pHyprRenderer->m_renderPass.add(makeUnique<CTexPassElement>(CTexPassElement::SRenderData{.tex = t, .box = b, .a = alpha}));
 #endif
 }
 

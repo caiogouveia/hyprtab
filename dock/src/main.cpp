@@ -12,6 +12,7 @@
 //           magnification = 1.6              # zoom dos ícones sob o mouse; 1 desliga
 //           position = bottom                # bottom, left ou right
 //           reserve = 1                      # reserva a faixa da dock: janelas não ficam por baixo
+//           ignore = steam_app_*, foo        # classes que não aparecem como abertas (além das padrão)
 //       }
 //   }
 //
@@ -67,6 +68,73 @@ double              g_magX     = 0; // x do mouse, local ao monitor (o último d
 double              g_level    = 0;
 double              g_levelTo  = 0;
 SP<CEventLoopTimer> g_anim;
+
+// arrastar para reordenar os fixos: pressionar e mover mais que DRAG_START px; soltar sem mover é clique
+constexpr double DRAG_START = 6, DRAG_LIFT = 4, DETACHED_ALPHA = 0.55;
+struct Drag {
+    bool          pressed = false, active = false;
+    std::string   cls;      // item pressionado
+    size_t        from = 0; // índice dele na dock
+    size_t        drop = 0; // onde cairia agora
+    PHLMONITORREF mon;
+    Vector2D      start;    // onde o botão foi pressionado (global)
+    double        x = 0;    // cursor ao longo da fileira, no espaço da dock
+    bool          outside = false; // longe da dock: soltar remove dos fixos
+    Vector2D      local;           // cursor no monitor (px lógicos), para desenhar o ícone solto
+} g_drag;
+
+// puffs de fumaça de ícones removidos arrastando para fora (ver dock::poofPuffs)
+struct Poof {
+    PHLMONITORREF                         mon;
+    Vector2D                              at; // ponto no monitor (px lógicos)
+    std::string                           cls;
+    std::chrono::steady_clock::time_point start;
+};
+std::vector<Poof> g_poofs;
+
+// textura de uma partícula de fumaça: blobs com degradê radial sobrepostos (contorno irregular, bordas
+// esfumadas). variant = formato (0..2) + 3 * tom (claro / acinzentado); -1 = clarão (um só blob, branco).
+// Geradas uma vez e só escaladas ao desenhar.
+render::Tex smokeTexture(int variant) {
+    static auto* cache = new std::unordered_map<int, render::Tex>();
+    if (auto it = cache->find(variant); it != cache->end())
+        return it->second;
+
+    constexpr int    S    = 128;
+    const double     tone = variant < 0 ? 1.0 : variant / 3 == 0 ? 0.96 : 0.74;
+    cairo_surface_t* surf = cairo_image_surface_create(CAIRO_FORMAT_ARGB32, S, S);
+    cairo_t*         cr   = cairo_create(surf);
+    auto blob = [&](double cx, double cy, double r, double a) {
+        auto* g = cairo_pattern_create_radial(cx, cy, 0, cx, cy, r);
+        cairo_pattern_add_color_stop_rgba(g, 0, tone, tone, tone, a);
+        cairo_pattern_add_color_stop_rgba(g, 0.45, tone, tone, tone, a * 0.6);
+        cairo_pattern_add_color_stop_rgba(g, 1, tone, tone, tone, 0);
+        cairo_set_source(cr, g);
+        cairo_arc(cr, cx, cy, r, 0, 2 * M_PI);
+        cairo_fill(cr);
+        cairo_pattern_destroy(g);
+    };
+    if (variant < 0)
+        blob(S / 2.0, S / 2.0, S / 2.0, 0.9);
+    else {
+        const int shape = variant % 3;
+        blob(S / 2.0, S / 2.0, S * 0.36, 0.5); // corpo
+        for (int k = 0; k < 5; k++) {           // lóbulos em volta, em posições fixas por formato
+            const double a = 2 * M_PI * (k + 0.37 * shape) / 5 + shape;
+            const double d = S * (0.10 + 0.04 * ((k + shape) % 3));
+            blob(S / 2.0 + std::cos(a) * d, S / 2.0 + std::sin(a) * d, S * (0.20 + 0.03 * ((k * 2 + shape) % 4)), 0.35);
+        }
+    }
+    cairo_destroy(cr);
+    cairo_surface_flush(surf);
+    auto t = render::makeTexture(surf);
+    cairo_surface_destroy(surf);
+    return (*cache)[variant] = t;
+}
+
+double msSince(std::chrono::steady_clock::time_point t) {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t).count();
+}
 
 // apps abrindo pela dock: o ícone pula até aparecer uma janela (ou estourar o tempo)
 struct Bounce {
@@ -124,6 +192,7 @@ void addConfig() {
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprdock:magnification", Hyprlang::FLOAT{1.6F});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprdock:position", Hyprlang::STRING{"bottom"});
     HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprdock:reserve", Hyprlang::INT{1});
+    HyprlandAPI::addConfigValue(PHANDLE, "plugin:hyprdock:ignore", Hyprlang::STRING{""});
 }
 
 // com config Lua (0.57+) o valor pode não existir: cai no padrão
@@ -148,6 +217,7 @@ std::string cfgStr(const char* name) {
 // config lida uma vez por ciclo de leitura (500 ms), não a cada quadro: buscar por nome é caro
 struct Config {
     std::vector<std::string> apps;
+    std::vector<std::string> ignore; // padrão + config
     dock::Edge               edge        = dock::Edge::Bottom;
     double                   iconSize    = 48, margin = 8, mag = 1.6;
     bool                     showRunning = true, reserve = true;
@@ -156,7 +226,10 @@ struct Config {
 // devolve true se a borda mudou (a dock sai de um lugar e aparece em outro)
 bool loadConfig() {
     const auto old = g_cfg.edge;
-    g_cfg.apps        = dock::parseList(cfgStr("plugin:hyprdock:apps"));
+    g_cfg.apps        = splitList(cfgStr("plugin:hyprdock:apps"));
+    g_cfg.ignore      = DEFAULT_IGNORE;
+    for (auto& p : splitList(cfgStr("plugin:hyprdock:ignore")))
+        g_cfg.ignore.push_back(p);
     g_cfg.edge        = dock::parseEdge(cfgStr("plugin:hyprdock:position"));
     g_cfg.iconSize    = (double)std::max<Hyprlang::INT>(8, cfgInt("plugin:hyprdock:icon_size", 48));
     g_cfg.margin      = (double)cfgInt("plugin:hyprdock:margin", 8);
@@ -297,7 +370,8 @@ std::string displayName(const dock::Item& it) {
 void refresh() {
     std::vector<std::pair<std::string, std::string>> windows;
     for (auto& [addr, ct] : parseClients(HyprlandAPI::invokeHyprctlCommand("clients", "", "j")))
-        windows.emplace_back(addr, ct.first);
+        if (!classIgnored(ct.first, g_cfg.ignore)) // janelas auxiliares não viram "app aberto"
+            windows.emplace_back(addr, ct.first);
 
     auto items = dock::buildItems(dock::effectivePins(configPins(), g_pins), windows, g_order, g_cfg.showRunning);
 
@@ -306,6 +380,17 @@ void refresh() {
     const bool changed = items.size() != g_items.size() || !std::equal(items.begin(), items.end(), g_items.begin(), [](const dock::Item& a, const dock::Item& b) {
                              return a.cls == b.cls && a.windows.empty() == b.windows.empty();
                          });
+    // app aberto por fora da dock (lançador, terminal...): pula BOUNCE_APPEAR vezes quando a janela aparece.
+    // Não na primeira leitura (apps que já estavam abertos ao carregar o plugin) nem se já está pulando.
+    static bool first = true;
+    if (!first)
+        for (auto& cls : dock::newlyOpened(g_items, items))
+            if (!g_bouncing.contains(cls)) {
+                g_bouncing[cls] = {std::chrono::steady_clock::now(), dock::BOUNCE_APPEAR * dock::BOUNCE_PERIOD};
+                kickAnim();
+            }
+    first = false;
+
     g_items = std::move(items);
     for (auto& [cls, b] : g_bouncing) {
         if (b.landAt >= 0)
@@ -411,8 +496,11 @@ dock::Frame frameFor(const PHLMONITOR& mon) {
     return {g_cfg.edge, mon->m_size.x, mon->m_size.y};
 }
 
+dock::Geom geometry(const dock::Frame& f, size_t n) {
+    return dock::geometry(n, f.w(), f.h(), g_cfg.iconSize, g_cfg.margin);
+}
 dock::Geom geometry(const dock::Frame& f) {
-    return dock::geometry(g_items.size(), f.w(), f.h(), g_cfg.iconSize, g_cfg.margin);
+    return geometry(f, g_items.size());
 }
 
 // ---------- desenho ----------
@@ -423,7 +511,7 @@ double magnification() {
 
 // itens como são desenhados neste monitor: ampliados se o mouse está nele, normais nos outros
 dock::Layout layoutFor(const PHLMONITOR& mon, const dock::Geom& g) {
-    const bool here = g_level > 0 && g_magMon.lock() == mon;
+    const bool here = !g_drag.active && g_level > 0 && g_magMon.lock() == mon; // arrastando: sem zoom
     return dock::magnify(g, g_items.size(), g_magX, here ? magnification() : 1, here ? g_level : 0);
 }
 
@@ -435,8 +523,9 @@ void draw(const PHLMONITOR& mon) {
     const double sc  = mon->m_scale;
     const auto   f   = frameFor(mon);
     const auto   g   = geometry(f);
-    const auto   l   = layoutFor(mon, g);
+    auto         l   = layoutFor(mon, g);
     const double mag = magnification();
+    const size_t n   = g_items.size();
     const double cs  = g.icon + 2 * dock::PAD * g.k; // célula sem zoom
     auto         px  = [&](double v) { return v * sc; };
     // caixa no espaço da dock -> caixa no monitor (px físicos)
@@ -448,15 +537,26 @@ void draw(const PHLMONITOR& mon) {
 
     const bool hoverHere = g_hover >= 0 && mon->logicalBox().containsPoint(g_mouse);
 
-    render::glassPanel(scr(l.panel.x, l.panel.y, l.panel.w, l.panel.h), (int)px(RADIUS * g.k), sc, g.k);
+    // arrastando neste monitor: os outros itens abrem espaço em `drop`; o arrastado vai por último, por cima.
+    // Solto (longe da dock): a dock já se mostra sem ele, que segue o cursor livre e meio transparente.
+    const bool dragging = g_drag.active && g_drag.mon.lock() == mon && g_drag.from < n;
+    const bool detached = dragging && g_drag.outside;
+    if (detached)
+        l = dock::magnify(geometry(f, n - 1), n - 1, 0, 1, 0);
+    auto slot = [&](size_t i) { return !dragging ? i : detached ? (i > g_drag.from ? i - 1 : i) : dock::dragSlot(i, g_drag.from, g_drag.drop); };
+
+    if (!(detached && n == 1)) // o único item saiu: não sobra dock
+        render::glassPanel(scr(l.panel.x, l.panel.y, l.panel.w, l.panel.h), (int)px(RADIUS * g.k), sc, g.k);
 
     // textura no tamanho máximo do zoom; nos tamanhos intermediários a GPU só reduz
     const int texPx = std::max(16, (int)std::lround(px(g.icon * mag)));
-    for (size_t i = 0; i < g_items.size(); i++) {
-        const auto& c = l.cells[i];
+    for (size_t i = 0; i < n; i++) {
+        if (dragging && i == g_drag.from)
+            continue;
+        const auto& c = l.cells[slot(i)];
 
         // com zoom ligado o próprio tamanho já destaca o item; o fundo claro fica só sem zoom
-        if (hoverHere && (size_t)g_hover == i && mag <= 1)
+        if (hoverHere && !dragging && (size_t)g_hover == i && mag <= 1)
             render::fillRect(scr(c.x, c.y, c.size, c.size), CHyprColor{1, 1, 1, 0.16}, (int)px(HOVER_RADIUS * g.k));
 
         const double icon = c.size * (g.icon / cs); // o padding cresce junto com o ícone
@@ -474,6 +574,21 @@ void draw(const PHLMONITOR& mon) {
             const double r = std::max(1.5, DOT_R * g.k);
             render::fillRect(scr(c.x + c.size / 2 - r, c.y + c.size + (dock::BARPAD * g.k) / 2 - r, 2 * r, 2 * r), CHyprColor{1, 1, 1, 0.85}, (int)std::ceil(px(r)));
         }
+    }
+    if (detached) {
+        // ícone solto no cursor, com o aviso de que soltar ali remove da dock
+        const double ix = g_drag.local.x - g.icon / 2, iy = g_drag.local.y - g.icon / 2;
+        render::drawTexture(render::iconTexture(g_items[g_drag.from].cls, texPx), CBox{px(ix), px(iy), px(g.icon), px(g.icon)}, DETACHED_ALPHA);
+        const double tw = 96, tx = g_drag.local.x - tw / 2, ty = iy - TIP_GAP - TIP_H;
+        render::glassPanel(CBox{px(tx), px(ty), px(tw), px(TIP_H)}, (int)px(TIP_H / 2), sc, 0.4);
+        const int lw = (int)std::lround(px(tw - 2 * TIP_PADX)), lh = (int)std::lround(px(TIP_H * 0.8));
+        render::drawTexture(render::labelTexture("Remover", lw, lh), CBox{px(tx + TIP_PADX), px(ty + TIP_H * 0.2), (double)lw, (double)lh});
+    } else if (dragging) {
+        const auto&  first = l.cells.front();
+        const auto&  last  = l.cells.back();
+        const double x     = std::clamp(g_drag.x - cs / 2, first.x, last.x); // segue o cursor, sem sair da fileira
+        const double off   = dock::PAD * g.k;
+        render::drawTexture(render::iconTexture(g_items[g_drag.from].cls, texPx), scr(x + off, first.y + off - DRAG_LIFT, g.icon, g.icon));
     }
 
     const auto panelScr = dock::toScreen(f, {l.panel.x, l.panel.y, l.panel.w, l.panel.h});
@@ -499,7 +614,7 @@ void draw(const PHLMONITOR& mon) {
     }
 
     // tooltip com o nome do app ao lado do ícone sob o mouse, para dentro da tela (escondido com o menu aberto)
-    if (hoverHere && !g_menu.open && (size_t)g_hover < g_items.size()) {
+    if (hoverHere && !g_menu.open && !dragging && (size_t)g_hover < g_items.size()) {
         const auto&  c    = l.cells[g_hover];
         const auto   name = displayName(g_items[g_hover]);
         const double tw   = std::clamp(9.0 * (double)name.size() + 2 * TIP_PADX, 60.0, 360.0);
@@ -507,6 +622,18 @@ void draw(const PHLMONITOR& mon) {
         render::glassPanel(CBox{px(t.x), px(t.y), px(t.w), px(t.h)}, (int)px(TIP_H / 2), sc, 0.4);
         const int lw = (int)std::lround(px(tw - 2 * TIP_PADX)), lh = (int)std::lround(px(TIP_H * 0.8));
         render::drawTexture(render::labelTexture(name, lw, lh), CBox{px(t.x + TIP_PADX), px(t.y + TIP_H * 0.2), (double)lw, (double)lh});
+    }
+
+    // puffs: o ícone encolhe e some, a fumaça se espalha
+    for (auto& p : g_poofs) {
+        if (p.mon.lock() != mon)
+            continue;
+        const double t = msSince(p.start) / dock::POOF_MS;
+        if (const double s = dock::poofIconScale(t) * g.icon; s > 0)
+            render::drawTexture(render::iconTexture(p.cls, texPx), CBox{px(p.at.x - s / 2), px(p.at.y - s / 2), px(s), px(s)},
+                                (float)(DETACHED_ALPHA * dock::poofIconAlpha(t)));
+        for (auto& f : dock::poofPuffs(t, g.icon))
+            render::drawTexture(smokeTexture(f.variant), CBox{px(p.at.x + f.dx - f.size / 2), px(p.at.y + f.dy - f.size / 2), px(f.size), px(f.size)}, (float)f.alpha);
     }
 }
 
@@ -615,7 +742,15 @@ void onAnim(SP<CEventLoopTimer> self, void*) {
                 damageDock(m);
     }
 
-    if (g_level != g_levelTo || !g_bouncing.empty())
+    // puffs: redesenha só em volta de cada um; o que terminou recebe um último redesenho para sumir
+    for (auto& p : g_poofs)
+        if (auto m = p.mon.lock()) {
+            const double r = g_cfg.iconSize * 3.5; // alcance das partículas (até ~2 ícones) + o tamanho delas
+            g_pHyprRenderer->damageBox(CBox{m->m_position.x + p.at.x - r, m->m_position.y + p.at.y - r, 2 * r, 2 * r});
+        }
+    std::erase_if(g_poofs, [](const Poof& p) { return msSince(p.start) >= dock::POOF_MS; });
+
+    if (g_level != g_levelTo || !g_bouncing.empty() || !g_poofs.empty())
         self->updateTimeout(ANIM_FRAME);
 }
 
@@ -683,8 +818,74 @@ bool updateZoom(const Vector2D& pos) {
     return false;
 }
 
+// ---------- arrastar ----------
+
+size_t pinnedCount() {
+    return (size_t)std::count_if(g_items.begin(), g_items.end(), [](const dock::Item& i) { return i.pinned; });
+}
+
+// cursor ao longo da fileira, no espaço da dock do monitor do arraste
+void updateDrag(const Vector2D& pos) {
+    auto mon = g_drag.mon.lock();
+    for (auto& p : g_placed)
+        if (mon && p.mon.lock() == mon) {
+            double dx = 0, dy = 0;
+            dock::toDock(p.f, pos.x - mon->m_position.x, pos.y - mon->m_position.y, dx, dy);
+            const bool wasOutside = g_drag.outside;
+            g_drag.x              = dx;
+            g_drag.drop           = dock::dropIndex(p.g, g_items.size(), dx, 0, std::max<size_t>(1, pinnedCount()) - 1);
+            g_drag.outside        = dock::dragOutside(p.g, dx, dy);
+            g_drag.local          = {pos.x - mon->m_position.x, pos.y - mon->m_position.y};
+            // solto, o ícone pode ir longe da faixa da dock (e deixar rastro ao voltar): redesenha o monitor
+            if (g_drag.outside || wasOutside)
+                g_pHyprRenderer->damageMonitor(mon);
+            else
+                damageDock(mon);
+            return;
+        }
+}
+
+void endDrag(bool commit) {
+    const auto d = g_drag;
+    g_drag       = {};
+    if (commit && d.active && d.outside) { // soltou longe da dock: deixa de ser fixo, com um puff
+        g_poofs.push_back({d.mon, d.local, d.cls, std::chrono::steady_clock::now()});
+        kickAnim();
+        dock::setPinned(g_pins, configPins(), d.cls, false);
+        savePins();
+        refresh();
+    } else if (commit && d.active) {
+        if (d.drop != d.from) {
+            dock::reorderPin(g_pins, configPins(), d.cls, d.drop);
+            savePins();
+            refresh();
+        }
+    } else if (commit) { // não arrastou: é um clique
+        const auto it = std::find_if(g_items.begin(), g_items.end(), [&](const dock::Item& i) { return i.cls == d.cls; });
+        if (it != g_items.end())
+            activate(*it);
+    }
+    animateTo(updateZoom(g_mouse) ? 1 : 0);
+    if (d.outside) // o ícone solto estava fora da faixa da dock
+        if (auto m = d.mon.lock())
+            g_pHyprRenderer->damageMonitor(m);
+    damageAll();
+}
+
 void onMouseMove(const Vector2D& pos) {
     g_mouse = pos;
+    if (g_drag.pressed) {
+        // só os fixos arrastam; os outros esperam soltar e viram clique
+        if (!g_drag.active && g_drag.from < g_items.size() && g_items[g_drag.from].pinned &&
+            std::hypot(pos.x - g_drag.start.x, pos.y - g_drag.start.y) > DRAG_START) {
+            g_drag.active = true;
+            g_level = g_levelTo = 0;
+        }
+        if (g_drag.active) {
+            updateDrag(pos);
+            return;
+        }
+    }
     // menu aberto: o zoom congela (como no macOS), mesmo com o mouse indo até o menu
     if (!g_menu.open)
         animateTo(updateZoom(pos) ? 1 : 0);
@@ -699,6 +900,12 @@ void onMouseMove(const Vector2D& pos) {
 
 // retorna true se o clique deve ser consumido (foi na dock)
 bool onMouseButton(const IPointer::SButtonEvent& ev) {
+    // soltar o esquerdo depois de pressionar num item: termina o arraste ou é o clique
+    if (ev.state != WL_POINTER_BUTTON_STATE_PRESSED && ev.button == BTN_LEFT_ && g_drag.pressed) {
+        g_swallowRelease = false;
+        endDrag(true);
+        return true;
+    }
     if (ev.state != WL_POINTER_BUTTON_STATE_PRESSED) {
         const bool s     = g_swallowRelease;
         g_swallowRelease = false;
@@ -732,8 +939,8 @@ bool onMouseButton(const IPointer::SButtonEvent& ev) {
         return false;
     g_swallowRelease = true;
     if (i >= 0 && (size_t)i < g_items.size()) {
-        if (ev.button == BTN_LEFT_)
-            activate(g_items[i]);
+        if (ev.button == BTN_LEFT_) // a ação fica para quando soltar (pode virar arraste)
+            g_drag = {true, false, g_items[i].cls, (size_t)i, (size_t)i, mon, g_mouse, 0};
         else if (ev.button == BTN_RIGHT_)
             openMenu(i, mon);
     }
@@ -742,9 +949,15 @@ bool onMouseButton(const IPointer::SButtonEvent& ev) {
 
 // ---------- teclado ----------
 
-// retorna true se a tecla deve ser consumida: Esc fecha o menu
+// retorna true se a tecla deve ser consumida: Esc fecha o menu ou cancela o arraste
 bool onKey(const IKeyboard::SKeyEvent& ev) {
-    if (!g_menu.open || ev.state != WL_KEYBOARD_KEY_STATE_PRESSED || ev.keycode != KEY_ESC_)
+    if (ev.state != WL_KEYBOARD_KEY_STATE_PRESSED || ev.keycode != KEY_ESC_)
+        return false;
+    if (g_drag.active) { // Esc no meio do arraste: cancela, a ordem não muda
+        endDrag(false);
+        return true;
+    }
+    if (!g_menu.open)
         return false;
     closeMenu();
     return true;

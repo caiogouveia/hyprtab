@@ -51,6 +51,18 @@ hl.bind("ALT + SHIFT + TAB", function() hl.plugin.hyprtab.prev() end)
 
 Também funciona via `hyprctl plugin load /caminho/para/hyprtab.so` ou `hyprpm`.
 
+### Janelas fora do Alt+Tab
+
+Janelas auxiliares ficam de fora por padrão (seletor de compartilhar tela, portais `xdg-desktop-portal*`, agentes de polkit, diálogos do Hyprland). Para acrescentar outras classes (`*` no começo/fim é curinga):
+
+```ini
+plugin {
+    hyprtab {
+        ignore = steam_app_*, outra-classe
+    }
+}
+```
+
 ## Compatibilidade por versão
 
 A API de plugins do Hyprland mudou bastante entre 0.52 e 0.57. As diferenças são detectadas em tempo de compilação (`src/compat.hpp`) e isoladas em poucas funções.

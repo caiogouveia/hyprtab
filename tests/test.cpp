@@ -88,6 +88,32 @@ static void testClientsSkips() {
     CHECK(c.at("0x2").second.empty());
 }
 
+// ---------- listas e janelas ignoradas ----------
+
+static void testSplitList() {
+    CHECK(splitList("").empty());
+    CHECK(splitList(" , ,").empty());
+    const auto l = splitList(" google-chrome,Alacritty ,, code ");
+    CHECK(l.size() == 3);
+    CHECK(l[0] == "google-chrome");
+    CHECK(l[1] == "Alacritty");
+    CHECK(l[2] == "code");
+}
+
+static void testIgnored() {
+    const auto& d = DEFAULT_IGNORE;
+    CHECK(classIgnored("hyprland-share-picker", d));
+    CHECK(classIgnored("Hyprland-Share-Picker", d));          // sem diferenciar maiúsculas
+    CHECK(classIgnored("xdg-desktop-portal-gtk", d));         // prefixo
+    CHECK(classIgnored("org.kde.polkit-kde-authentication-agent-1", d)); // contém
+    CHECK(!classIgnored("google-chrome", d));
+    CHECK(!classIgnored("Alacritty", d));
+    CHECK(!classIgnored("xdg-desktop", d));                   // menor que o prefixo
+    CHECK(classIgnored("steam_app_123", {"steam_app_*"}));
+    CHECK(classIgnored("foo.bar.Picker", {"*picker"}));       // sufixo
+    CHECK(!classIgnored("x", {"", "  "}));                    // padrões vazios não casam com nada
+}
+
 // ---------- layout ----------
 
 static void testGeometryCentered() {
@@ -149,6 +175,8 @@ int main() {
     testClientsUnicode();
     testClientsMalformed();
     testClientsSkips();
+    testSplitList();
+    testIgnored();
     testGeometryCentered();
     testGeometryEmpty();
     testGeometryShrinks();

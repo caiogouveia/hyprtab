@@ -10,6 +10,7 @@ Dock estilo macOS para o Hyprland, em **um único plugin `.so`** (C++), com o me
 - Mouse em cima: tooltip com o nome do app (do `.desktop`).
 - Clique: foca o app; clicando de novo, passa pelas janelas dele. Se não estiver aberto, abre (`Exec=` do `.desktop`).
 - Some quando o workspace tem janela em tela cheia.
+- Arrastar um app fixo reordena os fixos (a ordem fica salva). Arrastar para longe da dock e soltar remove dos fixos (aberto, ele continua na dock como app aberto). `Esc` cancela no meio do arraste.
 - Botão direito num app: menu com **Fechar** (todas as janelas do app), **Maximizar**, **Minimizar** e **Fixar na Dock / Remover da Dock**. Se o app não está aberto: **Abrir** e fixar/remover. `Esc`, um clique fora ou o botão direito de novo fecham o menu.
 
 ### Minimizar
@@ -18,7 +19,7 @@ O Hyprland não tem minimizar: a janela vai para o workspace especial `minimized
 
 ### Fixar pelo menu
 
-O que você fixa ou remove pelo menu fica salvo em `~/.local/state/hyprdock/pins` (ou `$XDG_STATE_HOME/hyprdock/pins`), por cima da lista `apps` da config: uma linha `+classe` para cada app fixado e `-classe` para cada um removido. Apagar o arquivo volta para exatamente o que está no `hyprland.conf`.
+O que você fixa ou remove pelo menu fica salvo em `~/.local/state/hyprdock/pins` (ou `$XDG_STATE_HOME/hyprdock/pins`), por cima da lista `apps` da config: uma linha `+classe` para cada app fixado, `-classe` para cada um removido e `=classe` com a ordem definida arrastando. Apagar o arquivo volta para exatamente o que está no `hyprland.conf`.
 
 > Primeira versão: testada no Hyprland 0.53.3. A reserva de espaço funciona de 0.53 a 0.56; na 0.57 o layout mudou e a dock fica por cima das janelas.
 
@@ -46,11 +47,14 @@ plugin {
         magnification = 1.6                                    # zoom do ícone sob o mouse; 1 desliga
         position = bottom                                      # bottom, left ou right
         reserve = 1                                            # 0: a dock fica por cima das janelas
+        ignore = steam_app_*, foo                              # classes que não aparecem como abertas; `*` no começo/fim
     }
 }
 ```
 
 Para descobrir a classe de um app aberto: `hyprctl clients | grep class`.
+
+Janelas auxiliares já são ignoradas por padrão (seletor de compartilhar tela, portais `xdg-desktop-portal*`, agentes de polkit, diálogos do Hyprland); `ignore` acrescenta outras. Isso vale para janelas abertas: um app que você fixou continua aparecendo.
 
 Na 0.57+ (config em Lua) as opções ainda não são lidas e a dock usa os valores padrão.
 

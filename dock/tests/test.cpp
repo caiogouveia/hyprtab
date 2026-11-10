@@ -23,18 +23,6 @@ static bool near(double a, double b) {
 
 using W = std::vector<std::pair<std::string, std::string>>;
 
-// ---------- parseList ----------
-
-static void testParseList() {
-    CHECK(dock::parseList("").empty());
-    CHECK(dock::parseList(" , ,").empty());
-    const auto l = dock::parseList(" google-chrome,Alacritty ,, code ");
-    CHECK(l.size() == 3);
-    CHECK(l[0] == "google-chrome");
-    CHECK(l[1] == "Alacritty");
-    CHECK(l[2] == "code");
-}
-
 // ---------- buildItems ----------
 
 static void testPinnedFirst() {
@@ -135,6 +123,38 @@ static void testPinsFile() {
     CHECK(p.added.size() == 1 && p.added[0] == "kitty");
     CHECK(p.removed.size() == 1 && p.removed[0] == "firefox");
     CHECK(dock::parsePins("").added.empty());
+}
+
+// ---------- reordenar ----------
+
+static void testMoveTo() {
+    const std::vector<std::string> l = {"a", "b", "c", "d"};
+    CHECK((dock::moveTo(l, "a", 2) == std::vector<std::string>{"b", "c", "a", "d"}));
+    CHECK((dock::moveTo(l, "D", 0) == std::vector<std::string>{"d", "a", "b", "c"}));
+    CHECK((dock::moveTo(l, "b", 99) == std::vector<std::string>{"a", "c", "d", "b"})); // além do fim: vai pro fim
+    CHECK(dock::moveTo(l, "zzz", 1) == l);                                              // não está na lista
+}
+
+static void testReorderPins() {
+    const std::vector<std::string> config = {"firefox", "Alacritty", "code"};
+    dock::PinOverrides             ov;
+    dock::reorderPin(ov, config, "code", 0);
+    auto pins = dock::effectivePins(config, ov);
+    CHECK((pins == std::vector<std::string>{"code", "firefox", "Alacritty"}));
+
+    // fixar um novo depois de reordenar: entra no fim, sem bagunçar a ordem salva
+    dock::setPinned(ov, config, "discord", true);
+    pins = dock::effectivePins(config, ov);
+    CHECK(pins.size() == 4 && pins[0] == "code" && pins[3] == "discord");
+
+    // remover um da ordem: some, o resto mantém a ordem
+    dock::setPinned(ov, config, "firefox", false);
+    pins = dock::effectivePins(config, ov);
+    CHECK((pins == std::vector<std::string>{"code", "Alacritty", "discord"}));
+
+    // a ordem sobrevive ao arquivo
+    const auto back = dock::parsePins(dock::serializePins(ov));
+    CHECK(dock::effectivePins(config, back) == pins);
 }
 
 // ---------- stripFieldCodes ----------
@@ -340,8 +360,97 @@ static void testBounce() {
     CHECK(near(dock::bounceOffset(dock::bounceLanding(1234), cell), 0));
 }
 
+static void testNewlyOpened() {
+    using I = dock::Item;
+    const std::vector<I> before = {I{"firefox", true, {}}, I{"Alacritty", true, {"0x1"}}, I{"discord", false, {"0x2"}}};
+    const std::vector<I> after  = {I{"firefox", true, {"0x3"}},          // fixo fechado que abriu
+                                   I{"Alacritty", true, {"0x1", "0x4"}}, // já aberto, ganhou outra janela
+                                   I{"discord", false, {"0x2"}},
+                                   I{"spotify", false, {"0x5"}}};        // novo, não estava na dock
+    const auto n = dock::newlyOpened(before, after);
+    CHECK((n == std::vector<std::string>{"firefox", "spotify"}));
+    CHECK(dock::newlyOpened(after, after).empty());
+    CHECK(dock::newlyOpened(after, before).empty()); // fechar não é abrir
+}
+
+// ---------- arrastar ----------
+
+static void testDropIndex() {
+    const size_t n = 6;
+    const auto   g = dock::geometry(n, 1920, 1080, 48, 8);
+    for (size_t i = 0; i < n; i++) {
+        const auto c = dock::cell(g, i);
+        CHECK(dock::dropIndex(g, n, c.x + c.size / 2, 0, n - 1) == i); // sobre o item i
+    }
+    CHECK(dock::dropIndex(g, n, g.x - 500, 0, n - 1) == 0);      // fora pela esquerda
+    CHECK(dock::dropIndex(g, n, g.x + 5000, 0, n - 1) == n - 1); // fora pela direita
+    const auto c4 = dock::cell(g, 4);
+    CHECK(dock::dropIndex(g, n, c4.x + 1, 0, 2) == 2);           // preso aos fixos [0, 2]
+}
+
+static void testDragSlot() {
+    // arrastando o 1 para a posição 3 numa fileira de 5: 0 fica, 2->1, 3->2, (3 vazio), 4->4
+    CHECK(dock::dragSlot(0, 1, 3) == 0);
+    CHECK(dock::dragSlot(2, 1, 3) == 1);
+    CHECK(dock::dragSlot(3, 1, 3) == 2);
+    CHECK(dock::dragSlot(4, 1, 3) == 4);
+    // arrastando o 3 para a posição 0: todos antes dele andam uma casa
+    CHECK(dock::dragSlot(0, 3, 0) == 1);
+    CHECK(dock::dragSlot(2, 3, 0) == 3);
+    CHECK(dock::dragSlot(4, 3, 0) == 4);
+    // posição de origem: ninguém se mexe
+    for (size_t i : {0, 1, 3, 4})
+        CHECK(dock::dragSlot(i, 2, 2) == i);
+}
+
+static void testDragOutside() {
+    const auto   g  = dock::geometry(5, 1920, 1080, 48, 8);
+    const double cs = 48 + 2 * dock::PAD;
+    CHECK(!dock::dragOutside(g, g.x + g.w / 2, g.y + g.h / 2)); // em cima da dock
+    CHECK(!dock::dragOutside(g, g.x + g.w / 2, g.y - cs + 1));  // pouco acima: ainda reordena
+    CHECK(dock::dragOutside(g, g.x + g.w / 2, g.y - cs - 1));   // acima de uma célula: remove
+    CHECK(dock::dragOutside(g, g.x - cs - 1, g.y + 5));         // além da ponta esquerda
+    CHECK(dock::dragOutside(g, g.x + g.w + cs + 1, g.y + 5));   // além da ponta direita
+    CHECK(!dock::dragOutside(g, g.x - 5, g.y + 5));             // logo ao lado: ainda reordena
+}
+
+// ---------- puff ----------
+
+static void testPoof() {
+    const double icon = 48;
+    CHECK(dock::poofPuffs(1, icon).empty());
+    CHECK(dock::poofPuffs(-0.1, icon).empty());
+    CHECK(dock::poofPuffs(0.3, icon).size() == dock::poofPuffs(0.3, icon).size()); // determinístico
+
+    // começo: clarão + todas as partículas; fim: só sobram as de vida longa
+    const auto a = dock::poofPuffs(0.02, icon);
+    CHECK(a.size() == (size_t)dock::POOF_PARTICLES + 1 && a.front().variant == -1);
+    CHECK(dock::poofPuffs(0.95, icon).size() < (size_t)dock::POOF_PARTICLES);
+
+    double spreadA = 0, spreadB = 0, yA = 0, yB = 0;
+    size_t nA = 0, nB = 0;
+    for (double t = 0; t < 1; t += 0.005)
+        for (auto& p : dock::poofPuffs(t, icon)) {
+            CHECK(p.alpha >= 0 && p.alpha <= 1 && p.size > 0);
+            CHECK(std::hypot(p.dx, p.dy) <= 2 * icon); // a nuvem fica perto do ponto
+            CHECK(p.variant >= -1 && p.variant < dock::POOF_VARIANTS);
+            if (p.variant < 0)
+                continue;
+            if (t < 0.15)
+                spreadA += std::hypot(p.dx, p.dy), yA += p.dy, nA++;
+            else if (t > 0.5 && t < 0.6)
+                spreadB += std::hypot(p.dx, p.dy), yB += p.dy, nB++;
+        }
+    CHECK(spreadB / nB > spreadA / nA); // se espalha
+    CHECK(yB / nB < yA / nA);           // e sobe (y para cima é menor)
+
+    // o ícone encolhe e some antes da fumaça
+    CHECK(near(dock::poofIconScale(0), 1) && near(dock::poofIconAlpha(0), 1));
+    CHECK(dock::poofIconScale(0.2) < 1 && dock::poofIconAlpha(0.2) < 1);
+    CHECK(near(dock::poofIconAlpha(dock::POOF_ICON_END), 0) && near(dock::poofIconScale(0.5), 0));
+}
+
 int main() {
-    testParseList();
     testPinnedFirst();
     testGroupsAndSorts();
     testStableOrder();
@@ -351,6 +460,8 @@ int main() {
     testTargetWindow();
     testPins();
     testPinsFile();
+    testMoveTo();
+    testReorderPins();
     testStripFieldCodes();
     testGeometry();
     testGeometryShrinks();
@@ -364,6 +475,11 @@ int main() {
     testMagnifyAnchored();
     testMagnifyHit();
     testBounce();
+    testNewlyOpened();
+    testDropIndex();
+    testDragSlot();
+    testDragOutside();
+    testPoof();
 
     std::printf("%d/%d checagens ok\n", g_checks - g_fails, g_checks);
     return g_fails ? 1 : 0;

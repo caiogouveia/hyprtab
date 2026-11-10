@@ -2,9 +2,22 @@
 
 #include "clients.hpp"
 
+#include <algorithm>
 #include <cctype>
 
 namespace {
+
+std::string lower(std::string s) {
+    std::transform(s.begin(), s.end(), s.begin(), [](unsigned char c) { return std::tolower(c); });
+    return s;
+}
+
+std::string trim(const std::string& s) {
+    const auto b = s.find_first_not_of(" \t\r");
+    if (b == std::string::npos)
+        return "";
+    return s.substr(b, s.find_last_not_of(" \t\r") - b + 1);
+}
 
 struct Json {
     const std::string& s;
@@ -128,3 +141,31 @@ Clients parseClients(const std::string& js) {
     return out;
 }
 
+std::vector<std::string> splitList(const std::string& csv) {
+    std::vector<std::string> out;
+    size_t                   start = 0;
+    while (start <= csv.size()) {
+        const auto end = std::min(csv.find(',', start), csv.size());
+        if (auto v = trim(csv.substr(start, end - start)); !v.empty())
+            out.push_back(std::move(v));
+        start = end + 1;
+    }
+    return out;
+}
+
+bool classIgnored(const std::string& cls, const std::vector<std::string>& patterns) {
+    const auto c = lower(cls);
+    for (const auto& raw : patterns) {
+        auto p = lower(trim(raw));
+        if (p.empty())
+            continue;
+        const bool head = p.front() == '*', tail = p.size() > 1 && p.back() == '*';
+        if (head)
+            p.erase(0, 1);
+        if (tail)
+            p.pop_back();
+        if (head && tail ? c.find(p) != std::string::npos : head ? c.ends_with(p) : tail ? c.starts_with(p) : c == p)
+            return true;
+    }
+    return false;
+}

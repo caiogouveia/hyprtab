@@ -25,18 +25,6 @@ std::string trim(const std::string& s) {
 
 // ---------- itens ----------
 
-std::vector<std::string> parseList(const std::string& csv) {
-    std::vector<std::string> out;
-    size_t                   start = 0;
-    while (start <= csv.size()) {
-        const auto end = std::min(csv.find(',', start), csv.size());
-        if (auto v = trim(csv.substr(start, end - start)); !v.empty())
-            out.push_back(std::move(v));
-        start = end + 1;
-    }
-    return out;
-}
-
 std::vector<Item> buildItems(const std::vector<std::string>& pinned, const std::vector<std::pair<std::string, std::string>>& windows,
                              std::vector<std::string>& order, bool showRunning) {
     std::vector<Item> items;
@@ -118,13 +106,25 @@ void erase(std::vector<std::string>& v, const std::string& key) {
 } // namespace
 
 std::vector<std::string> effectivePins(const std::vector<std::string>& config, const PinOverrides& ov) {
-    std::vector<std::string> out;
+    std::vector<std::string> base;
     for (auto& c : config)
         if (!contains(ov.removed, lower(c)))
-            out.push_back(c);
+            base.push_back(c);
     for (auto& a : ov.added)
-        if (!contains(out, lower(a)))
-            out.push_back(a);
+        if (!contains(base, lower(a)))
+            base.push_back(a);
+    if (ov.order.empty())
+        return base;
+
+    // primeiro os que têm lugar na ordem salva, nessa ordem; depois os novos, na ordem de antes
+    std::vector<std::string> out;
+    for (auto& o : ov.order)
+        for (auto& b : base)
+            if (lower(b) == o && !contains(out, o))
+                out.push_back(b);
+    for (auto& b : base)
+        if (!contains(out, lower(b)))
+            out.push_back(b);
     return out;
 }
 
@@ -155,6 +155,8 @@ PinOverrides parsePins(const std::string& text) {
             continue;
         if (line[0] == '+' && !contains(ov.added, key))
             ov.added.push_back(key);
+        else if (line[0] == '=' && !contains(ov.order, key))
+            ov.order.push_back(key);
         else if (line[0] == '-' && !contains(ov.removed, key))
             ov.removed.push_back(key);
     }
@@ -167,7 +169,28 @@ std::string serializePins(const PinOverrides& ov) {
         out += "+" + a + "\n";
     for (auto& r : ov.removed)
         out += "-" + r + "\n";
+    for (auto& o : ov.order)
+        out += "=" + o + "\n";
     return out;
+}
+
+// ---------- arrastar para reordenar ----------
+
+std::vector<std::string> moveTo(std::vector<std::string> list, const std::string& cls, size_t index) {
+    const auto key = lower(cls);
+    const auto it  = std::find_if(list.begin(), list.end(), [&](const std::string& x) { return lower(x) == key; });
+    if (it == list.end())
+        return list;
+    const auto value = *it;
+    list.erase(it);
+    list.insert(list.begin() + (long)std::min(index, list.size()), value);
+    return list;
+}
+
+void reorderPin(PinOverrides& ov, const std::vector<std::string>& config, const std::string& cls, size_t index) {
+    ov.order.clear();
+    for (auto& p : moveTo(effectivePins(config, ov), cls, index))
+        ov.order.push_back(lower(p));
 }
 
 std::string stripFieldCodes(const std::string& exec) {
@@ -209,6 +232,28 @@ int hit(const Geom& g, size_t n, double lx, double ly) {
             return (int)i;
     }
     return -1;
+}
+
+// ---------- arrastar ----------
+
+size_t dropIndex(const Geom& g, size_t n, double x, size_t lo, size_t hi) {
+    if (n == 0)
+        return 0;
+    const double cs  = g.icon + 2 * PAD * g.k;
+    const double gap = GAP * g.k;
+    const double rel = (x - (g.x + BARPAD * g.k) + gap / 2) / (cs + gap);
+    const auto   i   = (size_t)std::clamp(std::floor(rel), 0.0, (double)(n - 1));
+    return std::clamp(i, lo, std::max(lo, hi));
+}
+
+size_t dragSlot(size_t i, size_t from, size_t drop) {
+    const size_t rest = i > from ? i - 1 : i; // posição sem o item arrastado
+    return rest >= drop ? rest + 1 : rest;    // abre espaço em `drop`
+}
+
+bool dragOutside(const Geom& g, double x, double y) {
+    const double cs = g.icon + 2 * PAD * g.k;
+    return y < g.y - cs || x < g.x - cs || x > g.x + g.w + cs;
 }
 
 // ---------- ampliação ----------
@@ -276,6 +321,19 @@ double bounceOffset(double ms, double cell) {
     return cell * BOUNCE_HEIGHT * 4 * p * (1 - p);
 }
 
+std::vector<std::string> newlyOpened(const std::vector<Item>& before, const std::vector<Item>& after) {
+    std::vector<std::string> out;
+    for (auto& a : after) {
+        if (a.windows.empty())
+            continue;
+        const auto key = lower(a.cls);
+        const bool had = std::any_of(before.begin(), before.end(), [&](const Item& b) { return lower(b.cls) == key && !b.windows.empty(); });
+        if (!had)
+            out.push_back(a.cls);
+    }
+    return out;
+}
+
 double bounceLanding(double stopMs) {
     return std::ceil(std::max(0.0, stopMs) / BOUNCE_PERIOD) * BOUNCE_PERIOD;
 }
@@ -311,6 +369,58 @@ void toDock(const Frame& f, double sx, double sy, double& dx, double& dy) {
         case Edge::Right: dx = sy, dy = sx; return;
         case Edge::Left: dx = sy, dy = f.monW - sx; return;
     }
+}
+
+// ---------- puff ----------
+
+namespace {
+double easeOut(double t) {
+    return 1 - std::pow(1 - std::clamp(t, 0.0, 1.0), 3);
+}
+
+// pseudoaleatório fixo em [0, 1) para a partícula `i`, canal `c`
+double rnd(int i, int c) {
+    const double v = std::sin(i * 12.9898 + c * 78.233 + 0.5) * 43758.5453;
+    return v - std::floor(v);
+}
+} // namespace
+
+std::vector<Puff> poofPuffs(double t, double icon) {
+    std::vector<Puff> out;
+    if (t < 0 || t >= 1)
+        return out;
+
+    // clarão: núcleo claro que cresce e some no primeiro quinto
+    if (t < 0.2) {
+        const double f = t / 0.2;
+        out.push_back({0, 0, icon * (0.6 + 0.9 * easeOut(f)), 0.75 * (1 - f) * (1 - f), -1});
+    }
+
+    for (int i = 0; i < POOF_PARTICLES; i++) {
+        const double life = 0.65 + 0.35 * rnd(i, 0); // cada uma some no seu tempo
+        const double u    = t / life;                 // tempo próprio 0..1
+        if (u >= 1)
+            continue;
+        const double ang   = 2 * M_PI * (i + 0.6 * rnd(i, 1)) / POOF_PARTICLES;
+        const double dist  = icon * (0.35 + 0.75 * rnd(i, 2)) * easeOut(u); // sai rápido, desacelera
+        const double rise  = icon * (0.25 + 0.35 * rnd(i, 3)) * u * u;     // fumaça quente sobe, cada vez mais
+        const double size0 = icon * (0.35 + 0.30 * rnd(i, 4));
+        const double grow  = 1.6 + 1.2 * rnd(i, 5);
+        const double peak  = 0.35 + 0.35 * rnd(i, 6);
+        const double in    = std::min(1.0, u / 0.08);         // aparece rápido
+        const double outA  = std::pow(1 - u, 1.6);            // some devagar
+        out.push_back({std::cos(ang) * dist, std::sin(ang) * dist * 0.8 - rise, size0 * (1 + (grow - 1) * easeOut(u)), peak * in * outA,
+                       (int)(rnd(i, 7) * POOF_VARIANTS) % POOF_VARIANTS});
+    }
+    return out;
+}
+
+double poofIconScale(double t) {
+    return t >= POOF_ICON_END ? 0 : 1 - 0.7 * easeOut(t / POOF_ICON_END);
+}
+
+double poofIconAlpha(double t) {
+    return t >= POOF_ICON_END ? 0 : 1 - t / POOF_ICON_END;
 }
 
 // ---------- menu de contexto e tooltip ----------
