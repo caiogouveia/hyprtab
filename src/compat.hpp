@@ -145,7 +145,8 @@ inline bool hyprtabHasFullscreen(const M& mon) {
     if constexpr (requires { mon->m_activeWorkspace->m_hasFullscreenWindow; })
         return mon->m_activeWorkspace && mon->m_activeWorkspace->m_hasFullscreenWindow;
     else if constexpr (requires { mon->m_activeWorkspace->m_fullscreenMode; })
-        return mon->m_activeWorkspace && mon->m_activeWorkspace->m_fullscreenMode != FSMODE_NONE;
+        // FSMODE_NONE == 0; o enum mudou de namespace entre versões, então comparamos como int
+        return mon->m_activeWorkspace && static_cast<int>(mon->m_activeWorkspace->m_fullscreenMode) != 0;
     else
         return false;
 }
