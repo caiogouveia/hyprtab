@@ -44,6 +44,9 @@
 #endif
 
 #include <hyprland/src/Compositor.hpp>
+#if __has_include(<hyprland/src/managers/SessionLockManager.hpp>)
+#include <hyprland/src/managers/SessionLockManager.hpp>
+#endif
 
 // reservar espaço na borda (como as barras): área dinâmica do monitor + layout recalculável.
 // Na 0.57 o LayoutManager mudou de lugar e de API; lá a dock não reserva espaço.
@@ -124,6 +127,16 @@ inline void hyprtabDispatch(const std::string& legacy, const std::string& lua) {
 
 inline void hyprtabFocus(const std::string& addr) {
     hyprtabDispatch(std::format("focuswindow address:{}", addr), std::format("hl.dsp.focus({{ window = 'address:{}' }})", addr));
+}
+
+// tela bloqueada (hyprlock etc.)? O render em RENDER_LAST_MOMENT fica por cima do lock, então quem
+// desenha precisa checar isso
+inline bool hyprtabLocked() {
+#if __has_include(<hyprland/src/managers/SessionLockManager.hpp>)
+    return g_pSessionLockManager && g_pSessionLockManager->isSessionLocked();
+#else
+    return false;
+#endif
 }
 
 // o workspace ativo do monitor tem janela em tela cheia? (membro mudou de forma entre versões)

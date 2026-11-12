@@ -524,7 +524,7 @@ dock::Layout layoutFor(const PHLMONITOR& mon, const dock::Geom& g) {
 
 void draw(const PHLMONITOR& mon) {
     std::erase_if(g_placed, [&](const Placed& p) { return p.mon.expired() || p.mon.lock() == mon; });
-    if (g_items.empty() || hyprtabHasFullscreen(mon))
+    if (g_items.empty() || hyprtabLocked() || hyprtabHasFullscreen(mon))
         return;
 
     const double sc  = mon->m_scale;

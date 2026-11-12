@@ -30,7 +30,7 @@ void damage() {
 }
 
 void draw(const PHLMONITOR& mon) {
-    if (!g_visible || g_items.empty() || mon != g_mon.lock())
+    if (!g_visible || g_items.empty() || mon != g_mon.lock() || hyprtabLocked())
         return;
 
     const double sc = mon->m_scale;
