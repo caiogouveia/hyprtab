@@ -14,3 +14,9 @@ description = "Dock estilo macOS para o Hyprland"
 authors = ["caio"]
 output = "dock/hyprdock.so"
 build = ["make -C dock all"]
+
+[hyprmotif]
+description = "Molduras estilo Motif/mwm para o Hyprland"
+authors = ["caio"]
+output = "motif/hyprmotif.so"
+build = ["make -C motif all"]

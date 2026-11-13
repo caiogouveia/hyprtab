@@ -8,7 +8,7 @@ Alt+Tab estilo macOS para o Hyprland, em **um único plugin `.so`** (C++). Pensa
 - Barra central com os ícones dos apps, desenhada pelo próprio compositor.
 - Soltar o Alt confirma.
 
-No mesmo repositório: **[hyprdock](dock/README.md)**, uma dock estilo macOS com o mesmo visual.
+No mesmo repositório: **[hyprdock](dock/README.md)**, uma dock estilo macOS com o mesmo visual, e **[hyprmotif](motif/README.md)**, molduras estilo Motif/mwm (como o hyprbars, mas no visual do Motif; ainda não testado).
 
 ## Teclas e mouse (com o switcher aberto)
 

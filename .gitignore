@@ -25,3 +25,7 @@ tests/run
 # dock
 dock/hyprdock.so
 dock/tests/run
+
+# motif
+motif/hyprmotif.so
+motif/tests/run
