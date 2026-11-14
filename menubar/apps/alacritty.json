@@ -1,0 +1,29 @@
+{
+  "name": "Alacritty",
+  "source": "Atalhos padrão do Alacritty no Linux: `man 5 alacritty-bindings` (https://alacritty.org/config-alacritty-bindings.html)",
+  "match": ["alacritty"],
+  "menus": [
+    {"label": "Editar", "items": [
+      {"label": "Copiar", "keys": "Ctrl+Shift+C"},
+      {"label": "Colar", "keys": "Ctrl+Shift+V"},
+      {"label": "Colar Seleção", "keys": "Shift+Insert"},
+      "-",
+      {"label": "Buscar", "keys": "Ctrl+Shift+F"},
+      {"label": "Buscar para Trás", "keys": "Ctrl+Shift+B"},
+      "-",
+      {"label": "Modo Vi", "keys": "Ctrl+Shift+Space"}
+    ]},
+    {"label": "Exibir", "items": [
+      {"label": "Aumentar Fonte", "keys": "Ctrl+="},
+      {"label": "Diminuir Fonte", "keys": "Ctrl+-"},
+      {"label": "Tamanho Padrão", "keys": "Ctrl+0"}
+    ]},
+    {"label": "Terminal", "items": [
+      {"label": "Interromper (SIGINT)", "keys": "Ctrl+C"},
+      {"label": "Suspender (SIGTSTP)", "keys": "Ctrl+Z"},
+      {"label": "Fim da Entrada (EOF)", "keys": "Ctrl+D"},
+      "-",
+      {"label": "Limpar Tela", "keys": "Ctrl+L"}
+    ]}
+  ]
+}
