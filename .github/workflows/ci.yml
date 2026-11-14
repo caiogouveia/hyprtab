@@ -25,7 +25,7 @@ jobs:
             echo 'Server = https://archive.archlinux.org/repos/${{ matrix.date }}/$repo/os/$arch' > /etc/pacman.d/mirrorlist
           fi
           pacman --disable-download-timeout -Syyuu --noconfirm --needed \
-            git hyprland base-devel cairo pango pkgconf librsvg
+            git hyprland base-devel cairo pango pkgconf librsvg systemd-libs libxkbcommon
 
       - uses: actions/checkout@v4
 
@@ -52,9 +52,27 @@ jobs:
       - name: Testes dock
         run: make -C dock test
 
+      - name: Compilar barra de menus
+        run: make -C menubar
+
+      - name: Testes barra de menus
+        run: make -C menubar test
+
+      - name: Compilar pager
+        run: make -C pager
+
+      - name: Testes pager
+        run: make -C pager test
+
+      - name: Compilar busca
+        run: make -C find
+
+      - name: Testes busca
+        run: make -C find test
+
       - name: Conferir símbolos de plugin
         run: |
-          for so in hyprtab.so dock/hyprdock.so; do
+          for so in hyprtab.so dock/hyprdock.so menubar/hyprmenu.so pager/hyprpager.so find/hyprfind.so; do
             echo "$so"
             nm -D --defined-only "$so" | grep -iE 'plugin(Init|Exit|APIVersion)'
           done
@@ -64,6 +82,9 @@ jobs:
           mkdir -p dist
           cp hyprtab.so "dist/hyprtab-hyprland${{ steps.hl.outputs.version }}.so"
           cp dock/hyprdock.so "dist/hyprdock-hyprland${{ steps.hl.outputs.version }}.so"
+          cp menubar/hyprmenu.so "dist/hyprmenu-hyprland${{ steps.hl.outputs.version }}.so"
+          cp pager/hyprpager.so "dist/hyprpager-hyprland${{ steps.hl.outputs.version }}.so"
+          cp find/hyprfind.so "dist/hyprfind-hyprland${{ steps.hl.outputs.version }}.so"
 
       - uses: actions/upload-artifact@v4
         with:
