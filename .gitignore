@@ -25,3 +25,15 @@ tests/run
 # dock
 dock/hyprdock.so
 dock/tests/run
+
+# menubar
+menubar/hyprmenu.so
+menubar/tests/run
+
+# pager
+pager/hyprpager.so
+pager/tests/run
+
+# busca
+find/hyprfind.so
+find/tests/run
