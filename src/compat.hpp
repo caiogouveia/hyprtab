@@ -125,8 +125,21 @@ inline void hyprtabDispatch(const std::string& legacy, const std::string& lua) {
         HyprlandAPI::invokeHyprctlCommand("dispatch", lua);
 }
 
+// traz a janela para cima das outras. O focuswindow do Hyprland só foca: uma janela flutuante continua
+// atrás das que estavam por cima dela. (Janela lado a lado já fica sempre abaixo das flutuantes.)
+template <class W>
+inline void hyprtabRaise(const W& w) {
+    if (!w)
+        return;
+    if constexpr (requires { g_pCompositor->changeWindowZOrder(w, true); })
+        g_pCompositor->changeWindowZOrder(w, true);
+}
+
 inline void hyprtabFocus(const std::string& addr) {
     hyprtabDispatch(std::format("focuswindow address:{}", addr), std::format("hl.dsp.focus({{ window = 'address:{}' }})", addr));
+    // o focuswindow é síncrono: a janela em foco agora é a pedida
+    if (auto w = hyprtabFocusedWindow(); w && hyprtabAddr(w) == addr)
+        hyprtabRaise(w);
 }
 
 // tela bloqueada (hyprlock etc.)? O render em RENDER_LAST_MOMENT fica por cima do lock, então quem
@@ -139,13 +152,17 @@ inline bool hyprtabLocked() {
 #endif
 }
 
-// o workspace ativo do monitor tem janela em tela cheia? (membro mudou de forma entre versões)
+// o workspace ativo do monitor tem janela em tela cheia de verdade (cobre o monitor inteiro)?
+// Maximizada (`fullscreen 1`) não conta: ela respeita a área reservada, e esconder dock/barra deixaria
+// a faixa reservada vazia. (Os membros mudaram de forma entre versões.)
 template <class M>
 inline bool hyprtabHasFullscreen(const M& mon) {
-    if constexpr (requires { mon->m_activeWorkspace->m_hasFullscreenWindow; })
-        return mon->m_activeWorkspace && mon->m_activeWorkspace->m_hasFullscreenWindow;
+    if constexpr (requires { mon->m_activeWorkspace->m_fullscreenMode, mon->m_activeWorkspace->m_hasFullscreenWindow; })
+        return mon->m_activeWorkspace && mon->m_activeWorkspace->m_hasFullscreenWindow && (mon->m_activeWorkspace->m_fullscreenMode & FSMODE_FULLSCREEN);
     else if constexpr (requires { mon->m_activeWorkspace->m_fullscreenMode; })
-        return mon->m_activeWorkspace && mon->m_activeWorkspace->m_fullscreenMode != FSMODE_NONE;
+        return mon->m_activeWorkspace && (mon->m_activeWorkspace->m_fullscreenMode & FSMODE_FULLSCREEN);
+    else if constexpr (requires { mon->m_activeWorkspace->m_hasFullscreenWindow; })
+        return mon->m_activeWorkspace && mon->m_activeWorkspace->m_hasFullscreenWindow;
     else
         return false;
 }

@@ -1,4 +1,4 @@
-// hyprtab - alt+tab estilo macOS para o Hyprland (0.52 até 0.57+), tudo dentro do .so.
+// hyprtab - alt+tab inspirado no macOS para o Hyprland (0.52 até 0.57+), tudo dentro do .so.
 //
 // Compatibilidade entre versões (detecção por __has_include em compat.hpp):
 //   <= 0.53 : eventos via HyprlandAPI::registerCallbackDynamic
@@ -414,7 +414,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
             g_mru.push_back(w);
     touch(hyprtabFocusedWindow());
 
-    return {"hyprtab", "Alt+Tab estilo macOS", "caio", "0.3.0"};
+    return {"hyprtab", "Alt+Tab com ícones dos apps", "caio", "0.3.0"};
 }
 
 APICALL EXPORT void PLUGIN_EXIT() {
