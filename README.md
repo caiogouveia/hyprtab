@@ -10,10 +10,10 @@ Alt+Tab inspirado no do macOS para o Hyprland, em **um único plugin `.so`** (C+
 
 No mesmo repositório, com o mesmo visual:
 
-- **[hyprdock](dock/README.md)**: dock inspirada na do macOS.
-- **[hyprmenu](menubar/README.md)**: barra de menus global inspirada na do macOS, com os menus do app em foco.
-- **[hyprpager](pager/README.md)**: pager de workspaces no estilo dos temas metálicos clássicos do Enlightenment.
-- **[hyprfind](find/README.md)**: busca rápida inspirada no Spotlight (apps, janelas abertas, arquivos e contas).
+- **[hyprdock](plugins/dock/README.md)**: dock inspirada na do macOS.
+- **[hyprmenu](plugins/menubar/README.md)**: barra de menus global inspirada na do macOS, com os menus do app em foco.
+- **[hyprpager](plugins/pager/README.md)**: pager de workspaces no estilo dos temas metálicos clássicos do Enlightenment.
+- **[hyprfind](plugins/find/README.md)**: busca rápida inspirada no Spotlight (apps, janelas abertas, arquivos e contas).
 
 ## Teclas e mouse (com o switcher aberto)
 
@@ -33,10 +33,10 @@ No mesmo repositório, com o mesmo visual:
 Dependências de build: headers do Hyprland (`hyprland`), `pango`, `cairo`, `pixman`, `libdrm`. Opcional: `librsvg` (ícones SVG; detectado sozinho pelo `Makefile`).
 
 ```sh
-make
+make -C plugins/hyprtab
 ```
 
-Gera `hyprtab.so`. Sem `librsvg`, só ícones PNG funcionam; sem ícone aparece um círculo com a inicial do app.
+Gera `plugins/hyprtab/hyprtab.so` (`make` na raiz compila e `make test` testa todos os plugins). Sem `librsvg`, só ícones PNG funcionam; sem ícone aparece um círculo com a inicial do app.
 
 ### Config hyprlang (`hyprland.conf`, até 0.56)
 
@@ -70,7 +70,7 @@ plugin {
 
 ## Compatibilidade por versão
 
-A API de plugins do Hyprland mudou bastante entre 0.52 e 0.57. As diferenças são detectadas em tempo de compilação (`src/compat.hpp`) e isoladas em poucas funções.
+A API de plugins do Hyprland mudou bastante entre 0.52 e 0.57. As diferenças são detectadas em tempo de compilação (`common/compat.hpp`) e isoladas em poucas funções.
 
 | Hyprland   | Eventos                   | Dispatchers                   | Render                                |
 |------------|---------------------------|-------------------------------|---------------------------------------|
@@ -83,15 +83,15 @@ Na 0.57+ `hyprctl dispatch` aceita expressões Lua; o foco tenta o formato legad
 
 ## Estrutura
 
-- `src/main.cpp`: MRU, teclado, mouse, dispatchers e foco.
-- `src/ui.cpp`: barra do switcher (usa `render.cpp`).
-- `src/icons.cpp`: classe da janela → `.desktop` → arquivo de ícone → surface cairo; também nome e `Exec=` do `.desktop` (sem dependência do Hyprland).
-- `src/compat.hpp`: detecção da era do Hyprland e helpers comuns (foco, dispatch, lista de janelas).
-- `src/render.cpp`: desenho no compositor (texturas, painel de vidro, hook de render por versão), usado também pela dock.
-- `src/clients.cpp`: parser da saída de `hyprctl clients -j` (sem dependência do Hyprland).
-- `src/layout.cpp`: geometria da barra e hit-test em px lógicos (sem dependência do Hyprland).
-- `tests/test.cpp`: testes do parser e do layout, com ASan/UBSan: `make test`.
-- `dock/`: o hyprdock (ver [dock/README.md](dock/README.md)).
+- `plugins/hyprtab/src/main.cpp`: MRU, teclado, mouse, dispatchers e foco.
+- `plugins/hyprtab/src/ui.cpp`: barra do switcher (usa `render.cpp`).
+- `common/icons.cpp`: classe da janela → `.desktop` → arquivo de ícone → surface cairo; também nome e `Exec=` do `.desktop` (sem dependência do Hyprland).
+- `common/compat.hpp`: detecção da era do Hyprland e helpers comuns (foco, dispatch, lista de janelas).
+- `common/render.cpp`: desenho no compositor (texturas, painel de vidro, hook de render por versão), usado também pela dock.
+- `common/clients.cpp`: parser da saída de `hyprctl clients -j` (sem dependência do Hyprland).
+- `plugins/hyprtab/src/layout.cpp`: geometria da barra e hit-test em px lógicos (sem dependência do Hyprland).
+- `plugins/hyprtab/tests/test.cpp`: testes do parser e do layout, com ASan/UBSan: `make -C plugins/hyprtab test`.
+- `dock/`: o hyprdock (ver [dock/README.md](plugins/dock/README.md)).
 
 ## Status
 

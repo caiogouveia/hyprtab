@@ -1,19 +1,9 @@
-# O hyprtab é um único .so. Para SVG nos ícones, instale librsvg (detectado sozinho).
-RSVG := $(shell pkg-config --exists librsvg-2.0 && echo 1)
+# Compila e testa todos os plugins. Cada um tem o seu Makefile em plugins/<nome>/.
+# Código compartilhado (compat, render, ícones, parser do hyprctl) fica em common/.
+# borders (hyprborders) ainda não compila no 0.57 (header removido): fica de fora; `make -C plugins/borders` à parte
+PLUGINS := hyprtab dock menubar pager find
 
-CXXFLAGS_EXTRA := $(if $(RSVG),-DHYPRTAB_RSVG,)
-PKGS := pixman-1 libdrm hyprland pangocairo cairo $(if $(RSVG),librsvg-2.0,)
-
-all:
-	$(CXX) -shared -fPIC --no-gnu-unique src/*.cpp -o hyprtab.so -g -std=c++2b $(CXXFLAGS_EXTRA) \
-		`pkg-config --cflags $(PKGS)`
-
-# testes das partes sem dependência do Hyprland (parser do hyprctl, geometria da barra)
-test:
-	$(CXX) -std=c++2b -g -Wall -Wextra -fsanitize=address,undefined -D_GLIBCXX_ASSERTIONS tests/test.cpp src/clients.cpp src/layout.cpp -o tests/run
-	./tests/run
-
-clean:
-	rm -f ./hyprtab.so ./tests/run
+all test clean:
+	@for p in $(PLUGINS); do $(MAKE) -C plugins/$$p $@ || exit 1; done
 
 .PHONY: all test clean
