@@ -17,14 +17,14 @@ Cada plugin é um `.so` independente, com o mesmo visual de vidro. Carregue só 
 | **hyprfind** | busca rápida inspirada no Spotlight (apps, janelas, arquivos, contas, calculadora) | [`plugins/find`](plugins/find/README.md) | `hyprfind:toggle` |
 | **hyprborders** | bordas e sombras das janelas | `plugins/borders` | (sem atalho) |
 
-> O `hyprborders` ainda não compila no Hyprland 0.57 e fica fora do `make` da raiz. O código comum entre os plugins está em `common/`; o tema de cursor, em `themes/cursors`.
+> O `hyprborders` compila no 0.53 e no 0.57, mas no 0.57 **nunca rodou num Hyprland de verdade** (a curva da sombra usa o `decoration:shadow:render_power` do Hyprland). O código comum entre os plugins está em `common/`; o tema de cursor, em `themes/cursors`.
 
 ## Instalação
 
 Dependências de build: headers do Hyprland (`hyprland`), `pango`, `cairo`, `pixman`, `libdrm`. Opcional: `librsvg` (ícones SVG; detectado sozinho pelos `Makefile`). O hyprmenu também precisa de `libsystemd` e o hyprfind, de `libxkbcommon`.
 
 ```sh
-make                    # compila hyprtab, dock, menubar, pager e find
+make                    # compila hyprtab, dock, menubar, pager, find e borders
 make test               # roda os testes de todos
 make -C plugins/dock    # ou só um plugin
 ```
@@ -127,7 +127,7 @@ hl.config({
 })
 ```
 
-Na 0.57 (config em Lua) o hyprdock e o hyprmenu ainda não leem as opções e usam os valores padrão; a reserva de espaço também não funciona lá (ficam por cima das janelas). O hyprborders não compila.
+Na 0.57 (config em Lua) o hyprdock e o hyprmenu ainda não leem as opções e usam os valores padrão; a reserva de espaço também não funciona lá (ficam por cima das janelas).
 
 ## hyprtab
 

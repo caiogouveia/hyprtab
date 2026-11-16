@@ -283,3 +283,13 @@ inline HyprtabCtl hyprtabRegisterCtl(const std::string& name, std::function<std:
     return HyprlandAPI::registerHyprCtlCommand(PHANDLE, SHyprCtlCommand{name, true, [fn](eHyprCtlOutputFormat, std::string) { return fn(); }});
 }
 #endif
+
+// tela cheia de verdade na janela (não maximizada)
+template <class W>
+inline bool hyprtabRealFullscreen(const W& w) {
+#ifdef HYPRTAB_FS_CONTROLLER
+    return Fullscreen::controller()->isFullscreen(w, Fullscreen::FSMODE_FULLSCREEN);
+#else
+    return w->isFullscreen() && w->m_workspace && (w->m_workspace->m_fullscreenMode & FSMODE_FULLSCREEN);
+#endif
+}

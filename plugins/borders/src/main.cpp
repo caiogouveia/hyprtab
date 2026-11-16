@@ -32,12 +32,18 @@
 #include "../../../common/compat.hpp"
 #include "model.hpp"
 
+#if __has_include(<hyprland/src/config/ConfigDataValues.hpp>)
 #include <hyprland/src/config/ConfigDataValues.hpp>
+#endif
 #include <hyprland/src/managers/eventLoop/EventLoopManager.hpp>
 #include <hyprland/src/render/decorations/DecorationPositioner.hpp>
 #include <hyprland/src/render/decorations/IHyprWindowDecoration.hpp>
 #include <hyprland/src/render/pass/BorderPassElement.hpp>
 #include <hyprland/src/render/pass/PassElement.hpp>
+#if defined(HYPRTAB_RENDER_CTX)
+#include <hyprland/src/render/WindowRenderPresentation.hpp>
+#include <hyprland/src/desktop/view/window/WindowPresentation.hpp>
+#endif
 
 #include <algorithm>
 #include <any>
@@ -114,6 +120,34 @@ void loadConfig() {
 // Não usa getBoxWithIncludedDecos: ela chama métodos virtuais de todas as decorações da janela (inclusive
 // as de um .so recém-descarregado) e derrubou o Hyprland num recarregamento. getWindowDecorationReserved
 // só lê o espaço reservado que o posicionador já calculou.
+#ifdef HYPRTAB_RENDER_CTX
+// 0.57+: posição e tamanho vêm da interface de geometria; os deslocamentos (flutuante, troca de workspace)
+// chegam prontos em SWindowRenderPresentation (ou em presentation() fora do desenho)
+CBox fullWindowBox(const PHLWINDOW& w, const Vector2D& floatingOffset) {
+    const auto pos = w->position(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
+    const auto sz  = w->size(Desktop::View::IGeometric::GEOMETRIC_CURRENT);
+    const auto res = g_pDecorationPositioner->getWindowDecorationReserved(w);
+    CBox       b{pos.x - res.topLeft.x, pos.y - res.topLeft.y, sz.x + res.topLeft.x + res.bottomRight.x, sz.y + res.topLeft.y + res.bottomRight.y};
+    b.translate(floatingOffset);
+    return b;
+}
+CBox fullWindowBox(const PHLWINDOW& w) {
+    return fullWindowBox(w, w->presentation().floatingOffset());
+}
+
+borders::Rect windowRect(const PHLWINDOW& w, const PHLMONITOR& mon, const Render::SWindowRenderPresentation& pres) {
+    CBox b = fullWindowBox(w, pres.floatingOffset);
+    b.translate(pres.workspaceOffset);
+    return {b.x - mon->m_position.x, b.y - mon->m_position.y, b.w, b.h};
+}
+double windowRounding(const PHLWINDOW& w) {
+    return w->presentation().rounding();
+}
+float windowRoundingPower(const PHLWINDOW& w) {
+    return w->presentation().roundingPower();
+}
+using GradData = ::Config::CGradientValueData;
+#else
 CBox fullWindowBox(const PHLWINDOW& w) {
     const auto pos = w->m_realPosition->value();
     const auto sz  = w->m_realSize->value();
@@ -126,10 +160,18 @@ CBox fullWindowBox(const PHLWINDOW& w) {
 // a mesma caixa no monitor, em px lógicos, com o deslocamento do workspace trocando
 borders::Rect windowRect(const PHLWINDOW& w, const PHLMONITOR& mon) {
     CBox b = fullWindowBox(w);
-    if (w->m_workspace && !w->m_pinned)
+    if (w->m_workspace && !hyprtabPinned(w))
         b.translate(w->m_workspace->m_renderOffset->value());
     return {b.x - mon->m_position.x, b.y - mon->m_position.y, b.w, b.h};
 }
+double windowRounding(const PHLWINDOW& w) {
+    return windowRounding(w);
+}
+float windowRoundingPower(const PHLWINDOW& w) {
+    return windowRoundingPower(w);
+}
+using GradData = CGradientValueData;
+#endif
 
 CBox toPx(const borders::Rect& r, double scale) {
     return CBox{r.x * scale, r.y * scale, r.w * scale, r.h * scale}.round();
@@ -139,7 +181,7 @@ CBox toPx(const borders::Rect& r, double scale) {
 bool wantsDecoration(const PHLWINDOW& w) {
     if (!w || !hyprtabMapped(w))
         return false;
-    if (w->isFullscreen() && w->m_workspace && (w->m_workspace->m_fullscreenMode & FSMODE_FULLSCREEN))
+    if (hyprtabRealFullscreen(w))
         return false;
     if constexpr (requires { w->m_ruleApplicator->decorate().valueOrDefault(); })
         if (!w->m_ruleApplicator->decorate().valueOrDefault())
@@ -167,9 +209,46 @@ class CShadowPass : public IPassElement {
         int        round = 0, range = 0; // arredondamento do miolo e largura do esmaecimento (px)
         float      roundingPower = 2.F;
         CHyprColor color;
+#ifdef HYPRTAB_RENDER_CTX
+        Render::SWindowRenderPresentation presentation;
+#endif
     };
     explicit CShadowPass(const SData& d) : m_data(d) {}
 
+#ifdef HYPRTAB_RENDER_CTX
+    std::vector<UP<IPassElement>> draw(Render::CRenderContext& ctx) override {
+        // o desenho de sombra do Hyprland só pinta dentro de ctx.m_data.damage: troca a área, por um instante,
+        // pelo que está em volta da janela (e dentro do que precisa ser redesenhado)
+        auto&         rd    = ctx.m_data;
+        const CRegion saved = rd.damage;
+        CRegion       area{m_data.box};
+        const CBox&   w = m_data.window;
+        const double  r = std::clamp((double)m_data.windowRound, 0.0, std::min(w.w, w.h) / 2);
+        CRegion       cut;
+        cut.add(CBox{w.x + r, w.y, w.w - 2 * r, w.h});
+        cut.add(CBox{w.x, w.y + r, w.w, w.h - 2 * r});
+        area.subtract(cut);
+        area.intersect(saved);
+        if (area.empty())
+            return {};
+        rd.damage = area;
+        HYPRTAB_GL->blend(true);
+        // na 0.57 não há como trocar o decoration:shadow:render_power só para este desenho: a curva da sombra
+        // usa o valor do Hyprland
+        HYPRTAB_GL->renderRoundedShadow(ctx, m_data.box, m_data.round, m_data.roundingPower, m_data.range, GradData(m_data.color), 1.F, m_data.presentation);
+        rd.damage = saved;
+        return {};
+    }
+    bool needsLiveBlur(Render::CRenderContext&) override {
+        return false;
+    }
+    bool needsPrecomputeBlur(Render::CRenderContext&) override {
+        return false;
+    }
+    ePassElementType type() override {
+        return EK_CUSTOM;
+    }
+#else
     void draw(const CRegion&) override {
         // o desenho de sombra do Hyprland só pinta dentro de m_renderData.damage: troca a área, por um
         // instante, pelo que está em volta da janela (e dentro do que precisa ser redesenhado)
@@ -206,6 +285,7 @@ class CShadowPass : public IPassElement {
     bool needsPrecomputeBlur() override {
         return false;
     }
+#endif
     const char* passName() override {
         return "CHyprbordersShadowPass";
     }
@@ -213,6 +293,12 @@ class CShadowPass : public IPassElement {
   private:
     SData m_data;
 };
+
+#ifdef HYPRTAB_RENDER_CTX
+#define BORDERS_DRAW_SIG(name) void name(Render::CRenderContext& ctx, PHLMONITOR mon, float const& a, const Render::SWindowRenderPresentation& pres)
+#else
+#define BORDERS_DRAW_SIG(name) void name(PHLMONITOR mon, float const& a)
+#endif
 
 class CShadowDeco : public IHyprWindowDecoration {
   public:
@@ -228,12 +314,16 @@ class CShadowDeco : public IHyprWindowDecoration {
     }
     void onPositioningReply(const SDecorationPositioningReply&) override {}
 
-    void draw(PHLMONITOR mon, float const& a) override {
+    BORDERS_DRAW_SIG(draw) override {
         const auto w = m_window.lock();
         if (!g_cfg.shadow || !wantsDecoration(w))
             return;
         const double sc  = mon->m_scale;
-        const auto   win = windowRect(w, mon);
+#ifdef HYPRTAB_RENDER_CTX
+        const auto win = windowRect(w, mon, pres);
+#else
+        const auto win = windowRect(w, mon);
+#endif
         // ambiente primeiro, contato por cima
         for (const auto& s : borders::shadowLayers(g_cfg.look, w == hyprtabFocusedWindow())) {
             const double alpha = s.alpha * a;
@@ -243,12 +333,17 @@ class CShadowDeco : public IHyprWindowDecoration {
             CShadowPass::SData d;
             d.box           = toPx(sd.box, sc);
             d.window        = toPx(win, sc);
-            d.windowRound   = (int)std::lround(w->rounding() * sc);
-            d.round         = (int)std::lround(std::max(0.0, w->rounding() - sd.inset) * sc);
-            d.roundingPower = w->roundingPower();
+            d.windowRound   = (int)std::lround(windowRounding(w) * sc);
+            d.round         = (int)std::lround(std::max(0.0, windowRounding(w) - sd.inset) * sc);
+            d.roundingPower = windowRoundingPower(w);
             d.range         = (int)std::lround(sd.range * sc);
             d.color         = CHyprColor{0, 0, 0, (float)alpha};
+#ifdef HYPRTAB_RENDER_CTX
+            d.presentation = pres;
+            Render::IHyprRenderer::addPassElement(ctx, makeUnique<CShadowPass>(d));
+#else
             g_pHyprRenderer->m_renderPass.add(makeUnique<CShadowPass>(d));
+#endif
         }
     }
 
@@ -295,30 +390,38 @@ class CBorderDeco : public IHyprWindowDecoration {
     }
     void onPositioningReply(const SDecorationPositioningReply&) override {}
 
-    void draw(PHLMONITOR mon, float const& a) override {
+    BORDERS_DRAW_SIG(draw) override {
         const auto w = m_window.lock();
         if (!g_cfg.border || !wantsDecoration(w))
             return;
         const double sc    = mon->m_scale;
-        const CBox   box   = toPx(windowRect(w, mon), sc);
+#ifdef HYPRTAB_RENDER_CTX
+        const CBox box = toPx(windowRect(w, mon, pres), sc);
+#else
+        const CBox box = toPx(windowRect(w, mon), sc);
+#endif
         const int    lw    = std::max(1, (int)std::lround(sc)); // 1 px lógico
-        const double round = w->rounding() * sc;
+        const double round = windowRounding(w) * sc;
         if (box.w < 2 * lw + 1 || box.h < 2 * lw + 1)
             return;
 
         // fio escuro, logo fora da janela
         CBorderPassElement::SBorderData outer;
         outer.box           = box;
-        outer.grad1         = CGradientValueData(CHyprColor{0, 0, 0, (float)g_cfg.look.outerA});
+        outer.grad1         = GradData(CHyprColor{0, 0, 0, (float)g_cfg.look.outerA});
         outer.round         = (int)std::lround(round);
         outer.outerRound    = (int)std::lround(round + lw);
-        outer.roundingPower = w->roundingPower();
+        outer.roundingPower = windowRoundingPower(w);
         outer.borderSize    = lw;
         outer.a             = a;
+#ifdef HYPRTAB_RENDER_CTX
+        Render::IHyprRenderer::addPassElement(ctx, makeUnique<CBorderPassElement>(outer));
+#else
         g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(outer));
+#endif
 
         // fio claro, na primeira linha de pixels da janela: forte no topo, fraco nas laterais e embaixo
-        CGradientValueData grad;
+        GradData grad;
         grad.m_colors = {CHyprColor{1, 1, 1, (float)g_cfg.look.innerTopA}, CHyprColor{1, 1, 1, (float)g_cfg.look.innerSideA},
                          CHyprColor{1, 1, 1, (float)g_cfg.look.innerSideA}, CHyprColor{1, 1, 1, (float)(g_cfg.look.innerSideA * 0.5)}};
         grad.m_angle  = M_PI / 2; // de cima para baixo
@@ -328,10 +431,14 @@ class CBorderDeco : public IHyprWindowDecoration {
         inner.grad1         = grad;
         inner.round         = (int)std::lround(std::max(0.0, round - lw));
         inner.outerRound    = (int)std::lround(round);
-        inner.roundingPower = w->roundingPower();
+        inner.roundingPower = windowRoundingPower(w);
         inner.borderSize    = lw;
         inner.a             = a;
+#ifdef HYPRTAB_RENDER_CTX
+        Render::IHyprRenderer::addPassElement(ctx, makeUnique<CBorderPassElement>(inner));
+#else
         g_pHyprRenderer->m_renderPass.add(makeUnique<CBorderPassElement>(inner));
+#endif
     }
 
     eDecorationType getDecorationType() override {
@@ -370,8 +477,13 @@ SP<HOOK_CALLBACK_FN>      g_openCb;
 void decorate(const PHLWINDOW& w) {
     if (!w || std::any_of(g_decorated.begin(), g_decorated.end(), [&](const PHLWINDOWREF& r) { return r.lock() == w; }))
         return;
+#ifdef HYPRTAB_RENDER_CTX
+    HyprlandAPI::addWindowDecoration(PHANDLE, w, makeShared<CShadowDeco>(w));
+    HyprlandAPI::addWindowDecoration(PHANDLE, w, makeShared<CBorderDeco>(w));
+#else
     HyprlandAPI::addWindowDecoration(PHANDLE, w, makeUnique<CShadowDeco>(w));
     HyprlandAPI::addWindowDecoration(PHANDLE, w, makeUnique<CBorderDeco>(w));
+#endif
     g_decorated.emplace_back(w);
 }
 
@@ -428,6 +540,23 @@ APICALL EXPORT void PLUGIN_EXIT() {
     // mas só marca (m_decosToRemove) e o updateWindowDecos ignora janela oculta ou desmapeada (outro
     // workspace, janela em fade-out): elas ficariam na janela depois do dlclose, e o próximo
     // damageWindow leria a vtable do .so que não existe mais (SEGV).
+#ifdef HYPRTAB_RENDER_CTX
+    for (auto& w : hyprtabWindows()) {
+        if (!w)
+            continue;
+        std::vector<IHyprWindowDecoration*> mine;
+        for (const auto& d : w->presentation().decorations())
+            if (dynamic_cast<CShadowDeco*>(d.get()) || dynamic_cast<CBorderDeco*>(d.get()))
+                mine.push_back(d.get());
+        if (mine.empty())
+            continue;
+        if (hyprtabMapped(w))
+            g_pHyprRenderer->damageWindow(w);
+        for (auto* d : mine)
+            HyprlandAPI::removeWindowDecoration(PHANDLE, d);
+        g_pDecorationPositioner->forceRecalcFor(w);
+    }
+#else
     for (auto& w : hyprtabWindows()) {
         if (!w)
             continue;
@@ -447,9 +576,16 @@ APICALL EXPORT void PLUGIN_EXIT() {
         g_pDecorationPositioner->forceRecalcFor(w);
     }
 
+#endif
+
     // o render pass guarda os elementos do último quadro até o próximo beginRender; o CShadowPass é
     // deste .so, e destruí-lo depois do dlclose chama código que não existe mais (SEGV em
     // CRenderPass::clear). Some com eles agora, enquanto o destrutor ainda está carregado.
-    if (g_pHyprRenderer)
+    if (g_pHyprRenderer) {
+#ifdef HYPRTAB_RENDER_CTX
+        g_pHyprRenderer->context().m_pass.removeAllOfType("CHyprbordersShadowPass");
+#else
         g_pHyprRenderer->m_renderPass.clear();
+#endif
+    }
 }
