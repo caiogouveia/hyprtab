@@ -29,3 +29,5 @@ dock/tests/run
 # motif
 motif/hyprmotif.so
 motif/tests/run
+motif/tools/preview
+motif/preview.png

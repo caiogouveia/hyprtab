@@ -15,8 +15,10 @@
 #include <chrono>
 #include <cmath>
 #include <format>
+#include <functional>
 
 #include "FramePassElement.hpp"
+#include "paint.hpp"
 
 using motif::Part;
 using motif::Rect;
@@ -24,14 +26,6 @@ using motif::Rect;
 namespace {
 
 constexpr uint32_t BTN_LEFT_ = 0x110;
-
-// bisel: clareia/escurece a cor da face (o Motif real faz o mesmo a partir da cor de fundo)
-CHyprColor lighter(CHyprColor c) {
-    return CHyprColor{c.r + (1.F - c.r) * 0.55F, c.g + (1.F - c.g) * 0.55F, c.b + (1.F - c.b) * 0.55F, c.a};
-}
-CHyprColor darker(CHyprColor c) {
-    return CHyprColor{c.r * 0.45F, c.g * 0.45F, c.b * 0.45F, c.a};
-}
 
 // "dispatcher argumento" -> chama o dispatcher do Hyprland (age na janela ativa)
 void runDispatch(const std::string& spec) {
@@ -264,78 +258,30 @@ void CMotifFrame::renderPass(PHLMONITOR pMonitor, float const& a) {
         const double x1 = std::round((origin.x + r.x + r.w) * S), y1 = std::round((origin.y + r.y + r.h) * S);
         return CBox{x0, y0, x1 - x0, y1 - y0};
     };
-    auto fill = [&](const Rect& r, CHyprColor c) {
-        const CBox b = px(r);
-        if (b.w < 1 || b.h < 1)
-            return;
-        c.a *= a;
-        g_pHyprOpenGL->renderRect(b, c, {});
-    };
-
-    const CHyprColor face  = CHyprColor{(uint64_t)(m_active ? cfg::colActive() : cfg::colInactive())};
-    // sombras do mwm: se não vierem da config (0), saem da face
-    const auto       topCfg = m_active ? cfg::colActiveTop() : cfg::colInactiveTop();
-    const auto       botCfg = m_active ? cfg::colActiveBottom() : cfg::colInactiveBottom();
-    const CHyprColor light  = topCfg ? CHyprColor{(uint64_t)topCfg} : lighter(face);
-    const CHyprColor dark   = botCfg ? CHyprColor{(uint64_t)botCfg} : darker(face);
-
-    // bisel de `bw` px em volta de `r`: raised = claro em cima/esquerda, escuro embaixo/direita
-    // (sunken inverte). As bordas escuras vão primeiro e as claras cobrem os cantos.
-    auto bevel = [&](const Rect& r, double bw, bool raised) {
-        const auto tl = raised ? light : dark, br = raised ? dark : light;
-        fill({r.x, r.y + r.h - bw, r.w, bw}, br);
-        fill({r.x + r.w - bw, r.y, bw, r.h}, br);
-        fill({r.x, r.y, r.w - bw, bw}, tl);
-        fill({r.x, r.y, bw, r.h - bw}, tl);
-    };
-    auto raised = [&](const Rect& r, double bw, bool isRaised = true) {
-        fill(r, face);
-        bevel(r, bw, isRaised);
-    };
-
-    // 1) anel da moldura (face) + bisel externo de 2 px
-    fill({0, 0, FRAME.w, (double)(B + T)}, face);
-    fill({0, FRAME.h - B, FRAME.w, (double)B}, face);
-    fill({0, (double)(B + T), (double)B, L.client.h}, face);
-    fill({FRAME.w - B, (double)(B + T), (double)B, L.client.h}, face);
-    if (B >= 2)
-        bevel({0, 0, FRAME.w, FRAME.h}, 2, true);
-
-    if (m_shaded)
-        fill(L.client, face);
-
-    // 2) friso "afundado" em volta do cliente, dentro da borda
-    if (B >= 3 && L.client.w > 0 && L.client.h > 0)
-        bevel({L.client.x - 1, L.client.y - 1, L.client.w + 2, L.client.h + 2}, 1, false);
-
-    // 3) barra de título
-    if (T >= 2 && L.bar.w > 0)
-        raised(L.bar, 1);
-
-    // 4) botões: cada um é um quadrado em relevo (afundado enquanto apertado) com um glifo
-    auto button = [&](const Rect& cell, Part which) {
-        if (cell.w <= 0)
-            return;
-        const bool down = m_pressed == which;
-        const Rect r    = cell.inset(1);
-        raised(r, 1, !down);
-
-        const double off = down ? 1 : 0; // glifo desce 1 px quando apertado
-        const double cx = r.x + r.w / 2.0 + off, cy = r.y + r.h / 2.0 + off;
-        auto glyph = [&](double gw, double gh) {
-            gw = std::floor(gw), gh = std::floor(gh);
-            raised({std::floor(cx - gw / 2), std::floor(cy - gh / 2), gw, gh}, 1);
-        };
-        switch (which) {
-            case Part::Menu: glyph(std::max(6.0, r.w * 0.5), std::max(3.0, r.h * 0.2)); break; // traço
-            case Part::Minimize: glyph(std::max(4.0, r.w * 0.3), std::max(4.0, r.w * 0.3)); break; // quadradinho
-            case Part::Maximize: glyph(std::max(7.0, r.w * 0.6), std::max(7.0, r.w * 0.6)); break; // quadrado grande
-            default: break;
+    // tela de retângulos do plugin: GL do Hyprland, com o alfa da animação da janela
+    struct GlCanvas : motif::Canvas {
+        std::function<CBox(const Rect&)> px;
+        float                            a;
+        void fill(const Rect& r, const motif::Color& c) override {
+            const CBox b = px(r);
+            if (b.w < 1 || b.h < 1)
+                return;
+            g_pHyprOpenGL->renderRect(b, CHyprColor{c.r, c.g, c.b, c.a * a}, {});
         }
+    } canvas;
+    canvas.px = px;
+    canvas.a  = a;
+
+    auto toColor = [](long v) {
+        const CHyprColor c{(uint64_t)v};
+        return motif::Color{(float)c.r, (float)c.g, (float)c.b, (float)c.a};
     };
-    button(L.menu, Part::Menu);
-    button(L.minimize, Part::Minimize);
-    button(L.maximize, Part::Maximize);
+    const auto topCfg = m_active ? cfg::colActiveTop() : cfg::colInactiveTop();
+    const auto botCfg = m_active ? cfg::colActiveBottom() : cfg::colInactiveBottom();
+    const auto pal    = motif::makePalette(toColor(m_active ? cfg::colActive() : cfg::colInactive()), topCfg ? std::optional{toColor(topCfg)} : std::nullopt,
+                                           botCfg ? std::optional{toColor(botCfg)} : std::nullopt);
+
+    motif::paintFrame(canvas, L, FRAME.w, FRAME.h, B, T, pal, {m_pressed, m_shaded});
 
     // 5) título, centralizado entre os botões
     // alinhamento: left/right ganham 4 px de folga na barra

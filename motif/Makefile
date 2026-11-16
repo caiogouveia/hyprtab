@@ -15,3 +15,8 @@ clean:
 	rm -f ./hyprmotif.so ./tests/run
 
 .PHONY: all test clean
+
+preview:
+	$(CXX) -std=c++2b -g -Wall -Wextra tools/preview.cpp src/geometry.cpp src/paint.cpp -o tools/preview `pkg-config --cflags --libs pangocairo cairo`
+	./tools/preview preview.png
+.PHONY: preview
