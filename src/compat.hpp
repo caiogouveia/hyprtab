@@ -55,9 +55,15 @@
 #define HYPRTAB_RESERVE 1
 #endif
 
+#if __has_include(<hyprland/src/managers/fullscreen/FullscreenController.hpp>)
+#include <hyprland/src/managers/fullscreen/FullscreenController.hpp>
+#define HYPRTAB_FS_CONTROLLER 1 // >= 0.57: tela cheia saiu do workspace
+#endif
+
 #if __has_include(<hyprland/src/desktop/state/WindowState.hpp>)
 #include <hyprland/src/desktop/state/WindowState.hpp>
 #define HYPRTAB_WINDOW_STATE 1
+#include <hyprland/src/config/shared/actions/ConfigActions.hpp>
 #endif
 
 #include <hyprland/src/render/Renderer.hpp>
@@ -131,8 +137,11 @@ template <class W>
 inline void hyprtabRaise(const W& w) {
     if (!w)
         return;
-    if constexpr (requires { g_pCompositor->changeWindowZOrder(w, true); })
-        g_pCompositor->changeWindowZOrder(w, true);
+#ifdef HYPRTAB_WINDOW_STATE
+    (void)Config::Actions::alterZOrder("top", w);
+#else
+    g_pCompositor->changeWindowZOrder(w, true);
+#endif
 }
 
 inline void hyprtabFocus(const std::string& addr) {
@@ -157,12 +166,12 @@ inline bool hyprtabLocked() {
 // a faixa reservada vazia. (Os membros mudaram de forma entre versões.)
 template <class M>
 inline bool hyprtabHasFullscreen(const M& mon) {
+#ifdef HYPRTAB_FS_CONTROLLER
+    return Fullscreen::controller()->hasFullscreen(mon);
+#else
     if constexpr (requires { mon->m_activeWorkspace->m_fullscreenMode, mon->m_activeWorkspace->m_hasFullscreenWindow; })
         return mon->m_activeWorkspace && mon->m_activeWorkspace->m_hasFullscreenWindow && (mon->m_activeWorkspace->m_fullscreenMode & FSMODE_FULLSCREEN);
-    else if constexpr (requires { mon->m_activeWorkspace->m_fullscreenMode; })
-        return mon->m_activeWorkspace && (mon->m_activeWorkspace->m_fullscreenMode & FSMODE_FULLSCREEN);
-    else if constexpr (requires { mon->m_activeWorkspace->m_hasFullscreenWindow; })
-        return mon->m_activeWorkspace && mon->m_activeWorkspace->m_hasFullscreenWindow;
     else
-        return false;
+        return mon->m_activeWorkspace && (mon->m_activeWorkspace->m_fullscreenMode & FSMODE_FULLSCREEN);
+#endif
 }
