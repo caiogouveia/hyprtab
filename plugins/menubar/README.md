@@ -101,18 +101,18 @@ Na 0.57+ (config em Lua), o nome do dispatcher usado ainda não foi conferido nu
 
 ## Instalação
 
-Mesmas dependências do hyprtab, mais `libsystemd` (já vem em qualquer sistema com systemd; no Ubuntu/Debian os headers estão em `libsystemd-dev`). Na pasta `menubar/`:
+Mesmas dependências do hyprtab, mais `libsystemd` (já vem em qualquer sistema com systemd; no Ubuntu/Debian os headers estão em `libsystemd-dev`). Na pasta `plugins/menubar/`:
 
 ```sh
 make
 ```
 
-Gera `menubar/hyprmenu.so`.
+Gera `plugins/menubar/hyprmenu.so`.
 
 ## Config (`hyprland.conf`, até 0.56)
 
 ```ini
-plugin = /caminho/para/hyprtab/menubar/hyprmenu.so
+plugin = /caminho/para/hyprtab/plugins/menubar/hyprmenu.so
 
 plugin {
     hyprmenu {

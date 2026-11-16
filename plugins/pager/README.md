@@ -20,18 +20,18 @@ Cliques nos vãos entre as telas passam para a janela de baixo.
 
 ## Instalação
 
-Mesmas dependências do hyprtab. Na pasta `pager/`:
+Mesmas dependências do hyprtab. Na pasta `plugins/pager/`:
 
 ```sh
 make
 ```
 
-Gera `pager/hyprpager.so`.
+Gera `plugins/pager/hyprpager.so`.
 
 ## Config (`hyprland.conf`, até 0.56)
 
 ```ini
-plugin = /caminho/para/hyprtab/pager/hyprpager.so
+plugin = /caminho/para/hyprtab/plugins/pager/hyprpager.so
 
 plugin {
     hyprpager {

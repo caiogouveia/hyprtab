@@ -40,18 +40,18 @@ Segurar uma tecla repete, com o atraso e a velocidade do `input:repeat_delay` e 
 
 ## Instalação
 
-Mesmas dependências do hyprtab, mais `libxkbcommon` (já vem com o Hyprland). Opcionais: `fzf`, `wl-clipboard` (copiar contas), `xdg-utils` (abrir arquivos). Na pasta `find/`:
+Mesmas dependências do hyprtab, mais `libxkbcommon` (já vem com o Hyprland). Opcionais: `fzf`, `wl-clipboard` (copiar contas), `xdg-utils` (abrir arquivos). Na pasta `plugins/find/`:
 
 ```sh
 make
 ```
 
-Gera `find/hyprfind.so`.
+Gera `plugins/find/hyprfind.so`.
 
 ## Config (`hyprland.conf`, até 0.56)
 
 ```ini
-plugin = /caminho/para/hyprtab/find/hyprfind.so
+plugin = /caminho/para/hyprtab/plugins/find/hyprfind.so
 bind = SUPER, SPACE, hyprfind:toggle
 
 plugin {
@@ -68,7 +68,7 @@ plugin {
 ## Config Lua (`hyprland.lua`, 0.57+)
 
 ```lua
-hl.plugin.load("/caminho/para/hyprtab/find/hyprfind.so")
+hl.plugin.load("/caminho/para/hyprtab/plugins/find/hyprfind.so")
 hl.bind("SUPER + SPACE", function() hl.plugin.hyprfind.toggle() end)
 ```
 

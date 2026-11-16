@@ -34,18 +34,18 @@ O que você fixa ou remove pelo menu fica salvo em `~/.local/state/hyprdock/pins
 
 ## Instalação
 
-Mesmas dependências do hyprtab. Na pasta `dock/`:
+Mesmas dependências do hyprtab. Na pasta `plugins/dock/`:
 
 ```sh
 make
 ```
 
-Gera `dock/hyprdock.so`.
+Gera `plugins/dock/hyprdock.so`.
 
 ## Config (`hyprland.conf`, até 0.56)
 
 ```ini
-plugin = /caminho/para/hyprtab/dock/hyprdock.so
+plugin = /caminho/para/hyprtab/plugins/dock/hyprdock.so
 
 plugin {
     hyprdock {
