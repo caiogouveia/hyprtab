@@ -41,38 +41,38 @@ jobs:
           fi
 
       - name: Compilar
-        run: make
+        run: make -C plugins/hyprtab
 
       - name: Testes
-        run: make test
+        run: make -C plugins/hyprtab test
 
       - name: Compilar dock
-        run: make -C dock
+        run: make -C plugins/dock
 
       - name: Testes dock
-        run: make -C dock test
+        run: make -C plugins/dock test
 
       - name: Compilar barra de menus
-        run: make -C menubar
+        run: make -C plugins/menubar
 
       - name: Testes barra de menus
-        run: make -C menubar test
+        run: make -C plugins/menubar test
 
       - name: Compilar pager
-        run: make -C pager
+        run: make -C plugins/pager
 
       - name: Testes pager
-        run: make -C pager test
+        run: make -C plugins/pager test
 
       - name: Compilar busca
-        run: make -C find
+        run: make -C plugins/find
 
       - name: Testes busca
-        run: make -C find test
+        run: make -C plugins/find test
 
       - name: Conferir símbolos de plugin
         run: |
-          for so in hyprtab.so dock/hyprdock.so menubar/hyprmenu.so pager/hyprpager.so find/hyprfind.so; do
+          for so in plugins/hyprtab/hyprtab.so plugins/dock/hyprdock.so plugins/menubar/hyprmenu.so plugins/pager/hyprpager.so plugins/find/hyprfind.so; do
             echo "$so"
             nm -D --defined-only "$so" | grep -iE 'plugin(Init|Exit|APIVersion)'
           done
@@ -80,11 +80,11 @@ jobs:
       - name: Empacotar
         run: |
           mkdir -p dist
-          cp hyprtab.so "dist/hyprtab-hyprland${{ steps.hl.outputs.version }}.so"
-          cp dock/hyprdock.so "dist/hyprdock-hyprland${{ steps.hl.outputs.version }}.so"
-          cp menubar/hyprmenu.so "dist/hyprmenu-hyprland${{ steps.hl.outputs.version }}.so"
-          cp pager/hyprpager.so "dist/hyprpager-hyprland${{ steps.hl.outputs.version }}.so"
-          cp find/hyprfind.so "dist/hyprfind-hyprland${{ steps.hl.outputs.version }}.so"
+          cp plugins/hyprtab/hyprtab.so "dist/hyprtab-hyprland${{ steps.hl.outputs.version }}.so"
+          cp plugins/dock/hyprdock.so "dist/hyprdock-hyprland${{ steps.hl.outputs.version }}.so"
+          cp plugins/menubar/hyprmenu.so "dist/hyprmenu-hyprland${{ steps.hl.outputs.version }}.so"
+          cp plugins/pager/hyprpager.so "dist/hyprpager-hyprland${{ steps.hl.outputs.version }}.so"
+          cp plugins/find/hyprfind.so "dist/hyprfind-hyprland${{ steps.hl.outputs.version }}.so"
 
       - uses: actions/upload-artifact@v4
         with:
