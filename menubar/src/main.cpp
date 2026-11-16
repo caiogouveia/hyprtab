@@ -368,10 +368,10 @@ mb::Node separator() {
 std::string appName(const PHLWINDOW& w) {
     if (!w)
         return "Hyprland";
-    const auto* de = icons::desktopEntry(w->m_class);
+    const auto* de = icons::desktopEntry(hyprtabClass(w));
     if (de && !de->name.empty())
         return de->name;
-    return w->m_class.empty() ? w->m_title : w->m_class;
+    return hyprtabClass(w).empty() ? hyprtabTitle(w) : hyprtabClass(w);
 }
 
 mb::Node systemMenu() {
@@ -387,20 +387,20 @@ mb::Node windowMenu(const PHLWINDOW& w, const std::string& name) {
         m.children = {leaf(RELOAD, "Recarregar Configuração")};
         return m;
     }
-    const auto* de = icons::desktopEntry(w->m_class);
+    const auto* de = icons::desktopEntry(hyprtabClass(w));
     mb::Node    ws;
     ws.label   = "Mover para Workspace";
     ws.submenu = true;
-    const int cur = w->m_workspace ? (int)w->workspaceID() : 0;
+    const int cur = w->m_workspace ? hyprtabWorkspaceId(w) : 0;
     for (int i = 1; i <= 10; i++)
         ws.children.push_back(check(MOVE_WS + i, std::format("Workspace {}", i), i == cur));
 
     m.children = {leaf(NEW_WINDOW, "Nova Janela", de && !de->exec.empty()),
                   separator(),
-                  check(FULLSCREEN, "Tela Cheia", w->isFullscreen()),
+                  check(FULLSCREEN, "Tela Cheia", hyprtabIsFullscreen(w)),
                   leaf(MAXIMIZE, "Maximizar"),
-                  check(FLOAT, "Flutuante", w->m_isFloating),
-                  check(PIN, "Em Todos os Workspaces", w->m_pinned, w->m_isFloating), // o Hyprland só fixa janela flutuante
+                  check(FLOAT, "Flutuante", hyprtabFloating(w)),
+                  check(PIN, "Em Todos os Workspaces", hyprtabPinned(w), hyprtabFloating(w)), // o Hyprland só fixa janela flutuante
                   ws,
                   separator(),
                   leaf(CLOSE_WINDOW, "Fechar Janela"),
@@ -469,10 +469,7 @@ mb::Node volumeMenu() {
 }
 
 uint32_t xidOf(const PHLWINDOW& w) {
-    if (!w || !w->m_isX11)
-        return 0;
-    const auto xs = w->m_xwaylandSurface.lock();
-    return xs ? xs->m_xID : 0;
+    return hyprtabXid(w);
 }
 
 // ---------- mapas de atalhos ----------
@@ -584,7 +581,7 @@ void rebuild() {
         for (auto& c : root->children)
             if (!c.separator && !c.label.empty())
                 tops.push_back({c.label, false, Source::App, c});
-    } else if (const auto* map = w ? mb::findAppMap(g_maps, {w->m_class, w->m_initialClass}) : nullptr)
+    } else if (const auto* map = w ? mb::findAppMap(g_maps, {hyprtabClass(w), hyprtabInitialClass(w)}) : nullptr)
         for (auto& c : map->menus.children)
             tops.push_back({c.label, false, Source::Keys, c});
     if (volumeShown())
@@ -664,7 +661,7 @@ void runAct(int id) {
         return;
     switch (id) {
         case NEW_WINDOW:
-            if (const auto* de = icons::desktopEntry(w->m_class); de && !de->exec.empty())
+            if (const auto* de = icons::desktopEntry(hyprtabClass(w)); de && !de->exec.empty())
                 spawn(mb::stripFieldCodes(de->exec));
             break;
         case FULLSCREEN:
@@ -682,7 +679,7 @@ void runAct(int id) {
         case CLOSE_WINDOW: hyprtabDispatch(std::format("closewindow address:{}", addr), std::format("hl.dsp.window.close({{ window = {} }})", win)); break;
         case QUIT_APP:
             for (auto& o : hyprtabWindows())
-                if (o && hyprtabMapped(o) && o->m_class == w->m_class) {
+                if (o && hyprtabMapped(o) && hyprtabClass(o) == hyprtabClass(w)) {
                     const auto a = hyprtabAddr(o);
                     hyprtabDispatch(std::format("closewindow address:{}", a), std::format("hl.dsp.window.close({{ window = 'address:{}' }})", a));
                 }
@@ -837,7 +834,7 @@ bool barHidden(const PHLMONITOR& mon) {
 
 // monitor (com barra visível) sob o ponto global
 PHLMONITOR monitorAt(const Vector2D& pos) {
-    for (auto& m : g_pCompositor->m_monitors)
+    for (auto& m : hyprtabMonitors())
         if (m && m->logicalBox().containsPoint(pos))
             return m;
     return nullptr;
@@ -948,13 +945,13 @@ void draw(const PHLMONITOR& mon) {
 }
 
 void damageAll() {
-    for (auto& m : g_pCompositor->m_monitors)
+    for (auto& m : hyprtabMonitors())
         if (m)
             g_pHyprRenderer->damageMonitor(m);
 }
 
 void damageBars() {
-    for (auto& m : g_pCompositor->m_monitors)
+    for (auto& m : hyprtabMonitors())
         if (m)
             g_pHyprRenderer->damageBox(CBox{m->m_position.x, m->m_position.y, m->m_size.x, barH() + SHADOW_H + 2});
 }
@@ -979,7 +976,7 @@ void hkReset(Desktop::CReservedArea* self, Desktop::eReservedDynamicType t) {
     ((ResetFn)g_resetHook->m_original)(self, t);
     if (t != Desktop::RESERVED_DYNAMIC_TYPE_LS)
         return;
-    for (auto& mon : g_pCompositor->m_monitors)
+    for (auto& mon : hyprtabMonitors())
         if (mon && &mon->m_reservedArea == self) {
             const double r       = reserveFor(mon);
             g_reserved[mon->m_id] = r;
@@ -1002,7 +999,7 @@ void installReserve() {
 void syncReserve() {
     if (!g_resetHook)
         return;
-    for (auto& mon : g_pCompositor->m_monitors)
+    for (auto& mon : hyprtabMonitors())
         if (mon && (!g_reserved.contains(mon->m_id) || g_reserved[mon->m_id] != reserveFor(mon)))
             g_pHyprRenderer->arrangeLayersForMonitor(mon->m_id);
 }
@@ -1012,7 +1009,7 @@ void removeReserve() {
         return;
     HyprlandAPI::removeFunctionHook(PHANDLE, g_resetHook);
     g_resetHook = nullptr;
-    for (auto& mon : g_pCompositor->m_monitors)
+    for (auto& mon : hyprtabMonitors())
         if (mon)
             g_pHyprRenderer->arrangeLayersForMonitor(mon->m_id);
 }
@@ -1452,7 +1449,7 @@ void registerDispatchers() {
     }(PHANDLE);
 }
 
-SP<SHyprCtlCommand> g_ctl;
+HyprtabCtl g_ctl;
 
 } // namespace
 
@@ -1471,10 +1468,10 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
 
     appmenu::start(g_pCompositor->m_wlEventLoop, onMenusChanged);
     volume::start(g_pCompositor->m_wlEventLoop, onVolumeChanged);
-    g_ctl = HyprlandAPI::registerHyprCtlCommand(PHANDLE, SHyprCtlCommand{"hyprmenu", true, [](eHyprCtlOutputFormat, std::string) {
+    g_ctl = hyprtabRegisterCtl("hyprmenu", []() {
                                                                              auto m = g_open.mon.lock();
                                                                              return appmenu::status() + "\n" + volume::status() + "\n" + mapsStatus() + std::format("\nmenu aberto: {} (monitor {}, {} níveis)\ntítulos: {}\n", g_open.top, m ? m->m_name : "-", g_open.hover.size(), g_tops.size()) + "último fechamento: " + g_closeWhy + "\n";
-                                                                         }});
+                                                                         });
 
     g_pollTimer       = makeShared<CEventLoopTimer>(std::nullopt, onPoll, nullptr);
     g_focusTimer = makeShared<CEventLoopTimer>(std::nullopt, onFocusTimer, nullptr);

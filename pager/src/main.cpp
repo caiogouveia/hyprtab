@@ -166,21 +166,21 @@ std::vector<Win> windows() {
     for (auto& w : hyprtabWindows()) {
         if (!w || !hyprtabMapped(w) || w->isHidden() || !w->m_workspace || w->onSpecialWorkspace())
             continue;
-        const int ws = (int)w->workspaceID();
+        const int ws = hyprtabWorkspaceId(w);
         if (ws < 1 || ws > g_cfg.workspaces)
             continue;
         auto mon = w->m_monitor.lock();
         if (!mon)
             continue;
         const auto b = w->getWindowMainSurfaceBox();
-        out.push_back({w, hyprtabAddr(w), w->m_class, ws, {b.x - mon->m_position.x, b.y - mon->m_position.y, b.w, b.h}, mon->m_size.x, mon->m_size.y,
+        out.push_back({w, hyprtabAddr(w), hyprtabClass(w), ws, {b.x - mon->m_position.x, b.y - mon->m_position.y, b.w, b.h}, mon->m_size.x, mon->m_size.y,
                        w == focus});
     }
     return out;
 }
 
 int activeWorkspace(const PHLMONITOR& mon) {
-    return mon && mon->m_activeWorkspace ? (int)mon->m_activeWorkspace->m_id : 0;
+    return mon && mon->m_activeWorkspace ? hyprtabWsId(mon->m_activeWorkspace) : 0;
 }
 
 // ---------- estado ----------
@@ -351,7 +351,7 @@ void damageAll() {
             g_pHyprRenderer->damageBox(CBox{m->m_position.x + p.at.x - pad, m->m_position.y + p.at.y - pad, p.at.w + 2 * pad, p.at.h + 2 * pad});
         }
     if (g_placed.empty())
-        for (auto& m : g_pCompositor->m_monitors)
+        for (auto& m : hyprtabMonitors())
             if (m)
                 g_pHyprRenderer->damageMonitor(m);
 }
@@ -412,7 +412,7 @@ void onMouseMove(const Vector2D& pos) {
             g_press.dragging = true;
         if (g_press.dragging) {
             g_press.drop = screenAt(pos);
-            for (auto& m : g_pCompositor->m_monitors) // o ícone segue o cursor (pode sair do pager)
+            for (auto& m : hyprtabMonitors()) // o ícone segue o cursor (pode sair do pager)
                 if (m && m->logicalBox().containsPoint(pos))
                     g_pHyprRenderer->damageMonitor(m);
             return;
@@ -435,7 +435,7 @@ bool onMouseButton(const IPointer::SButtonEvent& ev) {
             if (p.dragging) {
                 if (p.drop >= 0 && p.drop != p.screen)
                     moveTo(p.addr, p.drop + 1);
-                for (auto& m : g_pCompositor->m_monitors)
+                for (auto& m : hyprtabMonitors())
                     if (m)
                         g_pHyprRenderer->damageMonitor(m);
             } else if (!p.addr.empty())
@@ -467,7 +467,7 @@ bool onKey(const IKeyboard::SKeyEvent& ev) {
     if (ev.state != WL_KEYBOARD_KEY_STATE_PRESSED || ev.keycode != KEY_ESC_ || !g_press.dragging)
         return false;
     g_press = {}; // Esc arrastando: cancela (o soltar continua engolido)
-    for (auto& m : g_pCompositor->m_monitors)
+    for (auto& m : hyprtabMonitors())
         if (m)
             g_pHyprRenderer->damageMonitor(m);
     return true;
@@ -526,7 +526,7 @@ void unregisterEvents() {
 void onAnim(SP<CEventLoopTimer> self, void*) {
     const double step  = ANIM_FRAME.count() / LAMP_MS;
     bool         again = false;
-    for (auto& mon : g_pCompositor->m_monitors) {
+    for (auto& mon : hyprtabMonitors()) {
         if (!mon)
             continue;
         auto it = g_lamps.find(mon->m_id);
@@ -549,7 +549,7 @@ void onAnim(SP<CEventLoopTimer> self, void*) {
 
 std::string signature() {
     std::string s;
-    for (auto& m : g_pCompositor->m_monitors)
+    for (auto& m : hyprtabMonitors())
         if (m)
             s += std::format("m{}:{};", m->m_id, activeWorkspace(m));
     for (auto& w : windows())
@@ -559,14 +559,14 @@ std::string signature() {
 
 void onPoll(SP<CEventLoopTimer> self, void*) {
     if (loadConfig()) {
-        for (auto& m : g_pCompositor->m_monitors)
+        for (auto& m : hyprtabMonitors())
             if (m)
                 g_pHyprRenderer->damageMonitor(m); // mudou de tamanho/lugar: some de onde estava
     }
     if (auto s = signature(); s != g_sig) {
         g_sig = std::move(s);
         damageAll();
-        for (auto& m : g_pCompositor->m_monitors)
+        for (auto& m : hyprtabMonitors())
             if (m && lampsMoving(m))
                 kickAnim(); // trocou de workspace: os refletores giram
     }
@@ -593,7 +593,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     g_anim = makeShared<CEventLoopTimer>(std::nullopt, onAnim, nullptr);
     g_pEventLoopManager->addTimer(g_anim);
 
-    for (auto& m : g_pCompositor->m_monitors)
+    for (auto& m : hyprtabMonitors())
         if (m)
             g_pHyprRenderer->damageMonitor(m);
 
@@ -608,7 +608,7 @@ APICALL EXPORT void PLUGIN_EXIT() {
         }
     unregisterEvents();
     render::unregisterRender();
-    for (auto& m : g_pCompositor->m_monitors)
+    for (auto& m : hyprtabMonitors())
         if (m)
             g_pHyprRenderer->damageMonitor(m);
     g_placed.clear();

@@ -175,3 +175,111 @@ inline bool hyprtabHasFullscreen(const M& mon) {
         return mon->m_activeWorkspace && (mon->m_activeWorkspace->m_fullscreenMode & FSMODE_FULLSCREEN);
 #endif
 }
+
+// ---- acessores que mudaram de forma entre versões (0.53 -> 0.57) ----
+// Templates sobre o tipo da janela: o `requires` só é avaliado na instanciação, então as duas formas
+// convivem sem erro de membro inexistente.
+template <class W>
+inline std::string hyprtabClass(const W& w) {
+    if constexpr (requires { w->metadata().appID(); })
+        return w->metadata().appID();
+    else
+        return w->m_class;
+}
+template <class W>
+inline std::string hyprtabInitialClass(const W& w) {
+    if constexpr (requires { w->metadata().initialAppID(); })
+        return w->metadata().initialAppID();
+    else
+        return w->m_initialClass;
+}
+template <class W>
+inline std::string hyprtabTitle(const W& w) {
+    if constexpr (requires { w->metadata().title(); })
+        return w->metadata().title();
+    else
+        return w->m_title;
+}
+template <class W>
+inline bool hyprtabFloating(const W& w) {
+    if constexpr (requires { w->isFloating(); })
+        return w->isFloating();
+    else
+        return w->m_isFloating;
+}
+template <class W>
+inline bool hyprtabPinned(const W& w) {
+#ifdef HYPRTAB_WINDOW_STATE
+    return (w->m_state & Desktop::View::WINDOW_STATE_PINNED) == Desktop::View::WINDOW_STATE_PINNED;
+#else
+    return w->m_pinned;
+#endif
+}
+// id numérico do workspace (0 para workspace especial)
+template <class WS>
+inline int hyprtabWsId(const WS& ws) {
+    if (!ws)
+        return 0;
+    if constexpr (requires { ws->numberedID(); })
+        return (int)ws->numberedID().value_or(0);
+    else
+        return (int)ws->m_id;
+}
+template <class W>
+inline int hyprtabWorkspaceId(const W& w) {
+    if constexpr (requires { w->workspaceID(); })
+        return (int)w->workspaceID();
+    else
+        return hyprtabWsId(w->m_workspace);
+}
+template <class W>
+inline bool hyprtabIsFullscreen(const W& w) {
+#ifdef HYPRTAB_FS_CONTROLLER
+    return Fullscreen::controller()->isFullscreen(w);
+#else
+    return w->isFullscreen();
+#endif
+}
+// id da janela X11 (0 se for Wayland nativa)
+template <class W>
+inline uint32_t hyprtabXid(const W& w) {
+    if (!w)
+        return 0;
+    if constexpr (requires { w->backend().isX11(); }) {
+        if (!w->backend().isX11())
+            return 0;
+        return (uint32_t)w->backend().clientID().id;
+    } else {
+        if (!w->m_isX11)
+            return 0;
+        const auto xs = w->m_xwaylandSurface.lock();
+        return xs ? xs->m_xID : 0;
+    }
+}
+
+// monitores ativos
+#if __has_include(<hyprland/src/state/MonitorState.hpp>)
+#include <hyprland/src/state/MonitorState.hpp>
+inline const std::vector<PHLMONITOR>& hyprtabMonitors() {
+    return State::monitorState()->monitors();
+}
+#else
+inline const std::vector<PHLMONITOR>& hyprtabMonitors() {
+    return g_pCompositor->m_monitors;
+}
+#endif
+
+// comando do hyprctl (`hyprctl <nome>`): a API mudou na 0.57 (IPC::Socket1)
+#if __has_include(<hyprland/src/ipc/s1/S1.hpp>)
+#include <hyprland/src/ipc/s1/S1.hpp>
+using HyprtabCtl = SP<IPC::Socket1::SCommand>;
+inline HyprtabCtl hyprtabRegisterCtl(const std::string& name, std::function<std::string()> fn) {
+    return HyprlandAPI::registerHyprCtlCommand(PHANDLE, IPC::Socket1::SCommand{name, IPC::Socket1::COMMAND_MATCH_EXACT,
+                                                                               [fn](const IPC::Socket1::SRequest&) { return IPC::Socket1::SResponse(fn()); }});
+}
+#else
+using HyprtabCtl = SP<SHyprCtlCommand>;
+inline HyprtabCtl hyprtabRegisterCtl(const std::string& name, std::function<std::string()> fn) {
+    return HyprlandAPI::registerHyprCtlCommand(PHANDLE, SHyprCtlCommand{name, true, [fn](eHyprCtlOutputFormat, std::string) { return fn(); }});
+}
+#endif

@@ -137,7 +137,7 @@ xkb_compose_table*    g_compose = nullptr;
 xkb_compose_state*    g_composeState = nullptr;
 
 SP<CEventLoopTimer> g_blink, g_debounce, g_filePoll, g_repeat;
-SP<SHyprCtlCommand> g_ctl;
+HyprtabCtl g_ctl;
 
 // ---------- geometria ----------
 
@@ -430,10 +430,10 @@ void loadAppsIfStale() {
 void loadWindows() {
     g_windows.clear();
     for (auto& w : hyprtabWindows()) {
-        if (!w || !hyprtabMapped(w) || classIgnored(w->m_class, DEFAULT_IGNORE))
+        if (!w || !hyprtabMapped(w) || classIgnored(hyprtabClass(w), DEFAULT_IGNORE))
             continue;
-        const auto* de = icons::desktopEntry(w->m_class);
-        g_windows.push_back({hyprtabAddr(w), w->m_class, w->m_title, de && !de->name.empty() ? de->name : w->m_class});
+        const auto* de = icons::desktopEntry(hyprtabClass(w));
+        g_windows.push_back({hyprtabAddr(w), hyprtabClass(w), hyprtabTitle(w), de && !de->name.empty() ? de->name : hyprtabClass(w)});
     }
 }
 
@@ -886,7 +886,7 @@ APICALL EXPORT PLUGIN_DESCRIPTION_INFO PLUGIN_INIT(HANDLE handle) {
     loadUsage();
     loadAppsIfStale();
 
-    g_ctl = HyprlandAPI::registerHyprCtlCommand(PHANDLE, SHyprCtlCommand{"hyprfind", true, [](eHyprCtlOutputFormat, std::string) { return status(); }});
+    g_ctl = hyprtabRegisterCtl("hyprfind", []() { return status(); });
 
     return {"hyprfind", "Busca rápida de apps, janelas e arquivos", "caio", "0.1.0"};
 }
