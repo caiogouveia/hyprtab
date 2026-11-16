@@ -1,0 +1,61 @@
+{
+  "name": "Arquivos (Nautilus)",
+  "source": "Atalhos do Arquivos: https://help.gnome.org/users/gnome-help/stable/shell-keyboard-shortcuts.html e a janela de atalhos do próprio app",
+  "match": ["org.gnome.nautilus", "nautilus"],
+  "menus": [
+    {"label": "Arquivo", "items": [
+      {"label": "Nova Janela", "keys": "Ctrl+N"},
+      {"label": "Nova Guia", "keys": "Ctrl+T"},
+      {"label": "Nova Pasta…", "keys": "Ctrl+Shift+N"},
+      "-",
+      {"label": "Abrir", "keys": "Enter"},
+      {"label": "Abrir em Nova Guia", "keys": "Ctrl+Enter"},
+      "-",
+      {"label": "Propriedades", "keys": "Ctrl+I"},
+      "-",
+      {"label": "Fechar Guia", "keys": "Ctrl+W"},
+      {"label": "Fechar Todas as Janelas", "keys": "Ctrl+Q"}
+    ]},
+    {"label": "Editar", "items": [
+      {"label": "Desfazer", "keys": "Ctrl+Z"},
+      {"label": "Refazer", "keys": "Ctrl+Shift+Z"},
+      "-",
+      {"label": "Recortar", "keys": "Ctrl+X"},
+      {"label": "Copiar", "keys": "Ctrl+C"},
+      {"label": "Colar", "keys": "Ctrl+V"},
+      "-",
+      {"label": "Selecionar Tudo", "keys": "Ctrl+A"},
+      {"label": "Inverter Seleção", "keys": "Ctrl+Shift+I"},
+      "-",
+      {"label": "Renomear…", "keys": "F2"},
+      {"label": "Mover para a Lixeira", "keys": "Del"},
+      {"label": "Excluir Permanentemente…", "keys": "Shift+Del"},
+      "-",
+      {"label": "Buscar", "keys": "Ctrl+F"}
+    ]},
+    {"label": "Exibir", "items": [
+      {"label": "Mostrar Arquivos Ocultos", "keys": "Ctrl+H"},
+      {"label": "Barra Lateral", "keys": "F9"},
+      "-",
+      {"label": "Lista", "keys": "Ctrl+1"},
+      {"label": "Grade", "keys": "Ctrl+2"},
+      "-",
+      {"label": "Ampliar", "keys": "Ctrl+="},
+      {"label": "Reduzir", "keys": "Ctrl+-"},
+      {"label": "Tamanho Normal", "keys": "Ctrl+0"},
+      "-",
+      {"label": "Recarregar", "keys": "F5"}
+    ]},
+    {"label": "Ir", "items": [
+      {"label": "Voltar", "keys": "Alt+Left"},
+      {"label": "Avançar", "keys": "Alt+Right"},
+      {"label": "Pasta Acima", "keys": "Alt+Up"},
+      {"label": "Pasta Pessoal", "keys": "Alt+Home"},
+      "-",
+      {"label": "Digitar Endereço…", "keys": "Ctrl+L"}
+    ]},
+    {"label": "Ajuda", "items": [
+      {"label": "Ajuda do Arquivos", "keys": "F1"}
+    ]}
+  ]
+}

@@ -320,11 +320,14 @@ Tex labelTexture(const std::string& text, int w, int h, bool center) {
 
 // ---------- painel ----------
 
-void glassPanel(const CBox& box, int round, double scale, double k) {
+void glassPanel(const CBox& box, int round, double scale, double k, int sliceThickness) {
     // px inteiros: as fatias se encostam sem fresta
     const double x = std::round(box.x), y = std::round(box.y);
     const int    bw = (int)std::lround(box.w), bh = (int)std::lround(box.h);
     const bool   vertical = bh > bw; // fatia ao longo do eixo maior (dock nas laterais)
+    // espessura das fatias geradas (a do painel, ou a pedida: aí elas são esticadas)
+    const int tk  = sliceThickness > 0 ? sliceThickness : (vertical ? bw : bh);
+    const int tbw = vertical ? tk : bw, tbh = vertical ? bh : tk;
 
     // sombra: fora dos cantos o blur (alcance < range) já é uniforme
     const int    range = std::max(4, (int)std::lround(SHADOW_RANGE * scale * k));
@@ -332,9 +335,9 @@ void glassPanel(const CBox& box, int round, double scale, double k) {
     const int    sw = bw + 2 * range, sh = bh + 2 * range;
     const int    scap = 2 * range + round + 1;
     if ((vertical ? sh : sw) >= 2 * scap + 1) {
-        const auto key = std::format("s{}{}r{}g{}", vertical ? "v" : "h", vertical ? bw : bh, round, range);
+        const auto key = std::format("s{}{}r{}g{}", vertical ? "v" : "h", tk, round, range);
         const auto& sl = slices(key, scap, vertical, [&](int len) {
-            return vertical ? shadowSurface(bw, len - 2 * range, round, range) : shadowSurface(len - 2 * range, bh, round, range);
+            return vertical ? shadowSurface(tbw, len - 2 * range, round, range) : shadowSurface(len - 2 * range, tbh, round, range);
         });
         drawSlices(sl, x - range, sy, sw, sh);
     } else {
@@ -351,9 +354,9 @@ void glassPanel(const CBox& box, int round, double scale, double k) {
     const int sheen = std::max(1, (int)std::lround(SHEEN_H * scale * k));
     const int rcap  = vertical ? (int)std::ceil(std::max({(double)round, rimFade(bh, round), (double)sheen})) + 2 * lw + 1 : round + 2 * lw + 1;
     if ((vertical ? bh : bw) >= 2 * rcap + 1) {
-        const auto key = std::format("b{}{}r{}l{}v{}", vertical ? "v" : "h", vertical ? bw : bh, round, lw, sheen);
+        const auto key = std::format("b{}{}r{}l{}v{}", vertical ? "v" : "h", tk, round, lw, sheen);
         const auto& sl = slices(key, rcap, vertical, [&](int len) {
-            return vertical ? rimSurface(bw, len, round, lw, sheen) : rimSurface(len, bh, round, lw, sheen);
+            return vertical ? rimSurface(tbw, len, round, lw, sheen) : rimSurface(len, tbh, round, lw, sheen);
         });
         drawSlices(sl, x, y, bw, bh);
     } else {

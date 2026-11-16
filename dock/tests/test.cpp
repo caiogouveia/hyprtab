@@ -337,7 +337,7 @@ static void testMagnifyHit() {
     CHECK(l.cells[1].y < g.y);
     CHECK(dock::hit(l, c.x + c.size / 2, l.cells[1].y + 2) == 1);
     CHECK(dock::hit(l, l.cells[0].x + 1, l.cells[1].y + 2) == -2); // acima do vizinho menor
-    CHECK(dock::hit(dock::Layout{g, {}}, g.x + 1, g.y + 1) == -1);
+    CHECK(dock::hit(dock::Layout{g, {}, {}}, g.x + 1, g.y + 1) == -1);
 }
 
 // ---------- pulo ----------
@@ -470,6 +470,133 @@ static void testPoof() {
     CHECK(near(dock::poofIconAlpha(dock::POOF_ICON_END), 0) && near(dock::poofIconScale(0.5), 0));
 }
 
+static void testSeparator() {
+    // inválidos (0, >= n) e repetidos são ignorados
+    CHECK(dock::geometry(4, 1920, 1080, 48, 8, {0}).seps.empty());
+    CHECK(dock::geometry(4, 1920, 1080, 48, 8, {4}).seps.empty());
+    CHECK(dock::geometry(4, 1920, 1080, 48, 8, {2, 2}).seps.size() == 1);
+    CHECK(near(dock::geometry(4, 1920, 1080, 48, 8, {4}).w, dock::geometry(4, 1920, 1080, 48, 8).w));
+
+    const size_t n = 5;
+    const auto   g = dock::geometry(n, 1920, 1080, 48, 8, {2}); // 2 fixos | 3 abertos
+    const auto   p = dock::geometry(n, 1920, 1080, 48, 8);
+    CHECK(g.seps.size() == 1 && g.seps[0] == 2);
+    CHECK(near(g.w, p.w + dock::SEP_W));                                    // o vão alarga o painel
+    CHECK(near(dock::cell(g, 1).x, dock::cell(p, 1).x - dock::SEP_W / 2)); // centralizado: tudo recua meio vão
+    CHECK(near(dock::cell(g, 2).x - (dock::cell(g, 1).x + dock::cell(g, 1).size), dock::GAP + dock::SEP_W));
+    // no vão do separador não há item
+    const double gapMid = dock::cell(g, 2).x - dock::SEP_W / 2;
+    CHECK(dock::hit(g, n, gapMid, g.y + g.h / 2) == -1);
+
+    // sem zoom, o layout é o da geometria e a linha fica no meio do vão
+    const auto l0 = dock::magnify(g, n, 0, 1, 0);
+    for (size_t i = 0; i < n; i++)
+        CHECK(near(l0.cells[i].x, dock::cell(g, i).x));
+    const double a = l0.cells[1].x + l0.cells[1].size, b = l0.cells[2].x;
+    CHECK(l0.sepX.size() == 1 && near(l0.sepX[0], (a + b) / 2));
+    CHECK(dock::magnify(p, n, 0, 1, 0).sepX.empty());
+
+    // com zoom: item sob o cursor continua sob ele, as células não se sobrepõem e o vão não encolhe
+    for (double mx = g.x + 1; mx < g.x + g.w; mx += 2) {
+        const auto l = dock::magnify(g, n, mx, 1.8, 1);
+        for (size_t i = 1; i < n; i++)
+            CHECK(l.cells[i].x >= l.cells[i - 1].x + l.cells[i - 1].size + dock::GAP - 1e-9);
+        CHECK(l.cells[2].x - (l.cells[1].x + l.cells[1].size) >= dock::GAP + dock::SEP_W - 1e-9);
+        CHECK(l.sepX[0] > l.cells[1].x + l.cells[1].size && l.sepX[0] < l.cells[2].x);
+        const int before = dock::hit(g, n, mx, g.y + g.h / 2);
+        if (before >= 0)
+            CHECK(dock::hit(l, mx, l.cells[before].y + l.cells[before].size / 2) == before);
+    }
+    // o ponto do separador sob o cursor também fica parado
+    const auto ls = dock::magnify(g, n, l0.sepX[0], 1.8, 1);
+    CHECK(near(ls.sepX[0], l0.sepX[0]));
+}
+
+static void testTwoSeparators() {
+    // fixos | abertos | Lixeira
+    const size_t n = 6;
+    const auto   g = dock::geometry(n, 1920, 1080, 48, 8, {5, 2});
+    const auto   p = dock::geometry(n, 1920, 1080, 48, 8);
+    CHECK(g.seps.size() == 2 && g.seps[0] == 2 && g.seps[1] == 5); // ordenados
+    CHECK(near(g.w, p.w + 2 * dock::SEP_W));
+    CHECK(near(dock::cell(g, 5).x - (dock::cell(g, 4).x + dock::cell(g, 4).size), dock::GAP + dock::SEP_W));
+    const auto l0 = dock::magnify(g, n, 0, 1, 0);
+    CHECK(l0.sepX.size() == 2 && l0.sepX[0] < l0.sepX[1]);
+    for (double mx = g.x + 1; mx < g.x + g.w; mx += 2) {
+        const auto l = dock::magnify(g, n, mx, 1.8, 1);
+        for (size_t i = 1; i < n; i++)
+            CHECK(l.cells[i].x >= l.cells[i - 1].x + l.cells[i - 1].size + dock::GAP - 1e-9);
+        CHECK(l.sepX[1] > l.cells[4].x + l.cells[4].size && l.sepX[1] < l.cells[5].x);
+        const int before = dock::hit(g, n, mx, g.y + g.h / 2);
+        if (before >= 0)
+            CHECK(dock::hit(l, mx, l.cells[before].y + l.cells[before].size / 2) == before);
+    }
+    for (auto sx : l0.sepX) // em cima de cada separador, ele fica parado
+        CHECK(near(dock::magnify(g, n, sx, 1.8, 1).sepX[sx == l0.sepX[0] ? 0 : 1], sx));
+}
+
+static void testMenuSeparators() {
+    const dock::Frame       f{dock::Edge::Bottom, 1920, 1080};
+    const dock::Box         cell{900, 1000, 60, 60}, panel{600, 990, 700, 80};
+    const std::vector<bool> seps = {false, false, true, false};
+    const auto              m    = dock::menuGeometry(f, cell, panel, seps);
+    CHECK(near(m.h, 3 * dock::MENU_ROW + dock::MENU_SEP + 2 * dock::MENU_PAD));
+    CHECK(near(m.y + m.h, panel.y - dock::MENU_GAP)); // acima da dock
+    CHECK(near(dock::menuRowY(m, seps, 3), m.y + dock::MENU_PAD + 2 * dock::MENU_ROW + dock::MENU_SEP));
+    const double x = m.x + 20;
+    CHECK(dock::menuHit(m, seps, x, dock::menuRowY(m, seps, 1) + 1) == 1);
+    CHECK(dock::menuHit(m, seps, x, dock::menuRowY(m, seps, 2) + 1) == -1); // separador não é clicável
+    CHECK(dock::menuHit(m, seps, x, dock::menuRowY(m, seps, 3) + dock::MENU_ROW - 1) == 3);
+    CHECK(dock::menuHit(m, seps, x, m.y + 1) == -1);  // padding
+    CHECK(dock::menuHit(m, seps, m.x - 1, m.y + 10) == -2);
+    // sem separadores, igual à versão por contagem
+    const auto a = dock::menuGeometry(f, cell, panel, std::vector<bool>(3, false));
+    const auto b = dock::menuGeometry(f, cell, panel, 3);
+    CHECK(near(a.y, b.y) && near(a.h, b.h));
+}
+
+static void testSlider() {
+    CHECK(near(dock::sliderValue(100, 100, 200, 1, 3), 1));
+    CHECK(near(dock::sliderValue(150, 100, 200, 1, 3), 2));
+    CHECK(near(dock::sliderValue(50, 100, 200, 1, 3), 1));  // antes do trilho: a ponta
+    CHECK(near(dock::sliderValue(300, 100, 200, 1, 3), 3)); // depois: a outra ponta
+    CHECK(near(dock::sliderX(2, 100, 200, 1, 3), 150));
+    CHECK(near(dock::sliderX(9, 100, 200, 1, 3), 200));
+    for (double v = 1.1; v <= 2.5; v += 0.1) // ida e volta
+        CHECK(near(dock::sliderValue(dock::sliderX(v, 10, 90, dock::MAG_MIN, dock::MAG_MAX), 10, 90, dock::MAG_MIN, dock::MAG_MAX), v));
+    CHECK(near(dock::sliderValue(5, 10, 10, 1, 3), 1)); // trilho vazio
+}
+
+static void testSubmenu() {
+    const dock::MenuGeom parent{100, 500, dock::MENU_W, 200};
+    const auto           s = dock::submenuGeometry(parent, 600, 3, 1920, 1080);
+    CHECK(near(s.x, parent.x + parent.w - 2));
+    CHECK(near(s.y + dock::MENU_PAD, 600)); // primeira linha na altura da linha pai
+    CHECK(near(s.h, 3 * dock::MENU_ROW + 2 * dock::MENU_PAD));
+    // sem espaço à direita: abre à esquerda
+    const dock::MenuGeom right{1800, 500, dock::MENU_W, 200};
+    const auto           s2 = dock::submenuGeometry(right, 600, 3, 1920, 1080);
+    CHECK(near(s2.x + s2.w, right.x + 2));
+    // perto do fim da tela: sobe
+    const auto s3 = dock::submenuGeometry(parent, 1070, 3, 1920, 1080);
+    CHECK(s3.y + s3.h <= 1080 - 4 + 1e-9);
+}
+
+static void testSnapToEdge() {
+    const auto g = dock::geometry(5, 1920, 1080, 48, 8); // margem de 8 px até a borda (y = 1080)
+    CHECK(near(dock::snapToEdge(g, 1080, 500), 500));     // longe: não mexe
+    CHECK(near(dock::snapToEdge(g, 1080, g.y + 5), g.y + 5)); // em cima da dock: não mexe
+    const double s = dock::snapToEdge(g, 1080, 1079);     // na borda da tela
+    CHECK(s < g.y + g.h && s > g.y);
+    // cai dentro de um ícone (mesmo x)
+    const auto c = dock::cell(g, 2);
+    CHECK(dock::hit(g, 5, c.x + c.size / 2, s) == 2);
+    // e no zoom também
+    const auto l = dock::magnify(g, 5, c.x + c.size / 2, 1.8, 1);
+    CHECK(dock::hit(l, c.x + c.size / 2, s) == 2);
+    CHECK(near(dock::snapToEdge(g, 1080, 1090), 1090)); // além da borda (outro monitor): não mexe
+}
+
 int main() {
     testPinnedFirst();
     testGroupsAndSorts();
@@ -493,6 +620,12 @@ int main() {
     testMagnifyOff();
     testMagnifyPeak();
     testMagnifyAnchored();
+    testSeparator();
+    testTwoSeparators();
+    testMenuSeparators();
+    testSlider();
+    testSubmenu();
+    testSnapToEdge();
     testMagnifyHit();
     testBounce();
     testNewlyOpened();

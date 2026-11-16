@@ -29,7 +29,8 @@ const std::unordered_map<std::string, icons::DesktopEntry>& desktopIndex() {
     static const auto idx = [] {
         std::unordered_map<std::string, icons::DesktopEntry> m;
         std::vector<fs::path>                        dirs = {"/usr/share/applications", "/usr/local/share/applications",
-                                                             "/var/lib/flatpak/exports/share/applications"};
+                                                             "/var/lib/flatpak/exports/share/applications",
+                                                             "/var/lib/snapd/desktop/applications"};
         if (const char* home = getenv("HOME")) {
             dirs.push_back(fs::path(home) / ".local/share/applications");
             dirs.push_back(fs::path(home) / ".local/share/flatpak/exports/share/applications");
@@ -75,7 +76,17 @@ const std::unordered_map<std::string, icons::DesktopEntry>& desktopIndex() {
 }
 
 // Procura o arquivo sem varrer a árvore inteira: raiz/tema/tamanho/{apps,applications}/nome.ext
+std::string searchFile(const std::string& name);
+
+// a busca varre todas as pastas de tema: o resultado (achou ou não) fica guardado por nome
 std::string findFile(const std::string& name) {
+    static std::unordered_map<std::string, std::string> cache;
+    if (auto it = cache.find(name); it != cache.end())
+        return it->second;
+    return cache[name] = searchFile(name);
+}
+
+std::string searchFile(const std::string& name) {
     if (name.empty())
         return "";
     if (name[0] == '/')
@@ -108,7 +119,7 @@ std::string findFile(const std::string& name) {
                     continue;
                 const auto s    = sz.path().filename().string();
                 const int  size = (!s.empty() && isdigit((unsigned char)s[0])) ? atoi(s.c_str()) : (s == "scalable" ? 0 : -1);
-                for (auto* sub : {"apps", "applications"})
+                for (auto* sub : {"apps", "applications", "places", "status", "mimetypes"}) // places/status: ícones como a lixeira; mimetypes: arquivos (hyprfind)
                     consider(sz.path() / sub, size);
                 // layout alternativo: tema/apps/<tamanho>/nome
                 if (s == "apps")

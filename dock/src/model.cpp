@@ -209,18 +209,28 @@ std::string stripFieldCodes(const std::string& exec) {
 
 // ---------- geometria ----------
 
-Geom geometry(size_t n, double monW, double monH, double iconSize, double margin) {
+Geom geometry(size_t n, double monW, double monH, double iconSize, double margin, std::vector<size_t> seps) {
+    std::erase_if(seps, [&](size_t s) { return s == 0 || s >= n; });
+    std::sort(seps.begin(), seps.end());
+    seps.erase(std::unique(seps.begin(), seps.end()), seps.end());
     const double cnt  = (double)std::max<size_t>(n, 1);
     const double cell = iconSize + 2 * PAD;
-    const double w    = cnt * cell + (cnt - 1) * GAP + 2 * BARPAD;
+    const double w    = cnt * cell + (cnt - 1) * GAP + 2 * BARPAD + (double)seps.size() * SEP_W;
     const double h    = cell + 2 * BARPAD;
     const double k    = std::clamp((monW - 80) / w, 0.0, 1.0);
-    return {(monW - w * k) / 2, monH - margin - h * k, w * k, h * k, iconSize * k, k};
+    return {(monW - w * k) / 2, monH - margin - h * k, w * k, h * k, iconSize * k, k, seps};
 }
+
+namespace {
+// quantos separadores vêm antes do item i (inclusive o que fica logo antes dele)
+size_t sepsBefore(const Geom& g, size_t i) {
+    return (size_t)std::count_if(g.seps.begin(), g.seps.end(), [&](size_t s) { return s <= i; });
+}
+} // namespace
 
 Cell cell(const Geom& g, size_t i) {
     const double size = g.icon + 2 * PAD * g.k;
-    return {g.x + BARPAD * g.k + (double)i * (size + GAP * g.k), g.y + BARPAD * g.k, size};
+    return {g.x + BARPAD * g.k + (double)i * (size + GAP * g.k) + (double)sepsBefore(g, i) * SEP_W * g.k, g.y + BARPAD * g.k, size};
 }
 
 int hit(const Geom& g, size_t n, double lx, double ly) {
@@ -232,6 +242,13 @@ int hit(const Geom& g, size_t n, double lx, double ly) {
             return (int)i;
     }
     return -1;
+}
+
+double snapToEdge(const Geom& g, double edgeY, double y) {
+    const double bottom = g.y + g.h;
+    if (y <= bottom || y > edgeY + 1) // +1: o cursor preso na última linha de pixels
+        return y;
+    return bottom - BARPAD * g.k - 0.5; // dentro da base das células (que crescem para cima)
 }
 
 // ---------- arrastar ----------
@@ -259,39 +276,68 @@ bool dragOutside(const Geom& g, double x, double y) {
 // ---------- ampliação ----------
 
 Layout magnify(const Geom& g, size_t n, double mouseX, double mag, double level) {
-    Layout       l{g, {}};
+    Layout       l{g, {}, {}};
     const double cs     = g.icon + 2 * PAD * g.k; // célula sem ampliação
     const double gap    = GAP * g.k;
     const double first  = g.x + BARPAD * g.k;
     const double bottom = g.y + BARPAD * g.k + cs;
     const double amount = std::max(0.0, mag - 1) * std::clamp(level, 0.0, 1.0);
+    const double sepw   = SEP_W * g.k;
+    // só os separadores que existem para estes n itens
+    std::vector<size_t> seps;
+    for (auto s : g.seps)
+        if (s > 0 && s < n)
+            seps.push_back(s);
+    auto isSep = [&](size_t i) { return std::find(seps.begin(), seps.end(), i) != seps.end(); };
+
+    // posição original de cada item (com os vãos dos separadores)
+    std::vector<double> base(n);
+    for (size_t i = 0; i < n; i++)
+        base[i] = cell(g, i).x;
 
     // tamanhos: cos² da distância do cursor ao centro original de cada item
     std::vector<double> size(n);
     for (size_t i = 0; i < n; i++) {
-        const double t = std::abs(mouseX - (first + (double)i * (cs + gap) + cs / 2)) / (cs * MAG_RANGE);
+        const double t = std::abs(mouseX - (base[i] + cs / 2)) / (cs * MAG_RANGE);
         const double f = t < 1 ? std::pow(std::cos(t * M_PI / 2), 2) : 0;
         size[i]        = cs * (1 + amount * f);
     }
 
-    // fileira ampliada a partir do mesmo início; depois desloca para o ponto sob o cursor ficar parado
+    // fileira ampliada a partir do mesmo início (os vãos dos separadores não crescem); depois desloca
+    // para o ponto sob o cursor ficar parado
     std::vector<double> x(n);
     double              cur = first;
     for (size_t i = 0; i < n; i++) {
+        if (isSep(i))
+            cur += sepw;
         x[i] = cur;
         cur += size[i] + gap;
     }
-    const double baseEnd = first + (double)n * (cs + gap), magEnd = cur;
+    const double baseEnd = first + (double)n * (cs + gap) + (double)seps.size() * sepw, magEnd = cur;
 
-    double mapped; // onde o ponto mouseX da fileira original foi parar na ampliada
-    if (n == 0 || mouseX <= first)
-        mapped = mouseX;
-    else if (mouseX >= baseEnd)
-        mapped = magEnd + (mouseX - baseEnd);
-    else {
-        const size_t j    = std::min(n - 1, (size_t)((mouseX - first) / (cs + gap)));
-        const double frac = (mouseX - (first + (double)j * (cs + gap))) / (cs + gap);
-        mapped            = x[j] + frac * (size[j] + gap);
+    // onde o ponto mouseX da fileira original foi parar na ampliada. Trechos: cada item com o vão depois
+    // dele (só a célula, se vem um separador); e o espaço vazio de cada separador (vão + separador),
+    // que não muda de tamanho. Cada trecho é mapeado proporcionalmente para o correspondente.
+    double mapped = mouseX;
+    if (n > 0 && mouseX > first) {
+        bool done = false;
+        if (mouseX >= baseEnd) {
+            mapped = magEnd + (mouseX - baseEnd);
+            done   = true;
+        }
+        for (auto s : seps)
+            if (!done && mouseX >= base[s - 1] + cs && mouseX < base[s]) {
+                mapped = x[s - 1] + size[s - 1] + (mouseX - (base[s - 1] + cs));
+                done   = true;
+            }
+        for (size_t j = 0; j < n && !done; j++) {
+            const bool   cut = isSep(j + 1);
+            const double seg = cut ? cs : cs + gap;
+            if (mouseX >= base[j] && mouseX < base[j] + seg) {
+                mapped = x[j] + (mouseX - base[j]) / seg * (cut ? size[j] : size[j] + gap);
+                done   = true;
+            }
+        }
     }
     const double shift = mouseX - mapped;
 
@@ -299,6 +345,8 @@ Layout magnify(const Geom& g, size_t n, double mouseX, double mag, double level)
         l.cells.push_back({x[i] + shift, bottom - size[i], size[i]});
     l.panel.x = g.x + shift;
     l.panel.w = g.w + (magEnd - baseEnd);
+    for (auto s : seps)
+        l.sepX.push_back(x[s] + shift - (sepw + gap) / 2);
     return l;
 }
 
@@ -464,6 +512,59 @@ int menuHit(const MenuGeom& m, size_t rows, double lx, double ly) {
     if (rel < 0 || rel >= (double)rows * MENU_ROW)
         return -1;
     return (int)(rel / MENU_ROW);
+}
+
+namespace {
+double menuHeight(const std::vector<bool>& seps) {
+    double h = 2 * MENU_PAD;
+    for (bool s : seps)
+        h += s ? MENU_SEP : MENU_ROW;
+    return h;
+}
+} // namespace
+
+MenuGeom menuGeometry(const Frame& f, const Box& cell, const Box& panel, const std::vector<bool>& seps) {
+    const auto b = besideItem(f, cell, panel, MENU_W, menuHeight(seps), MENU_GAP);
+    return {b.x, b.y, b.w, b.h};
+}
+
+double menuRowY(const MenuGeom& m, const std::vector<bool>& seps, size_t row) {
+    double y = m.y + MENU_PAD;
+    for (size_t i = 0; i < row && i < seps.size(); i++)
+        y += seps[i] ? MENU_SEP : MENU_ROW;
+    return y;
+}
+
+int menuHit(const MenuGeom& m, const std::vector<bool>& seps, double lx, double ly) {
+    if (lx < m.x || lx > m.x + m.w || ly < m.y || ly > m.y + m.h)
+        return -2;
+    for (size_t i = 0; i < seps.size(); i++) {
+        const double y = menuRowY(m, seps, i), h = seps[i] ? MENU_SEP : MENU_ROW;
+        if (ly >= y && ly < y + h)
+            return seps[i] ? -1 : (int)i;
+    }
+    return -1;
+}
+
+MenuGeom submenuGeometry(const MenuGeom& parent, double rowY, size_t rows, double monW, double monH) {
+    const double w = MENU_W, h = (double)rows * MENU_ROW + 2 * MENU_PAD;
+    double       x = parent.x + parent.w - 2;
+    if (x + w > monW - 4)
+        x = parent.x - w + 2;
+    const double y = std::clamp(rowY - MENU_PAD, 4.0, std::max(4.0, monH - h - 4));
+    return {std::max(4.0, x), y, w, h};
+}
+
+double sliderValue(double x, double x0, double x1, double lo, double hi) {
+    if (x1 <= x0)
+        return lo;
+    return lo + std::clamp((x - x0) / (x1 - x0), 0.0, 1.0) * (hi - lo);
+}
+
+double sliderX(double v, double x0, double x1, double lo, double hi) {
+    if (hi <= lo)
+        return x0;
+    return x0 + std::clamp((v - lo) / (hi - lo), 0.0, 1.0) * (x1 - x0);
 }
 
 } // namespace dock

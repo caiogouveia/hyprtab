@@ -25,7 +25,9 @@ Tex labelTexture(const std::string& text, int w, int h, bool center = true); // 
 
 // painel de vidro: sombra projetada + fundo translúcido com blur + borda dupla estilo macOS.
 // `scale` é a escala do monitor; `k` reduz sombra e véu junto com o painel.
-void glassPanel(const CBox& box, int round, double scale, double k = 1);
+// `sliceThickness` > 0: usa a sombra e a borda geradas para essa espessura (px), esticadas para a do painel,
+// em vez de gerar novas. Para quando a espessura muda a cada quadro (dock sendo redimensionada).
+void glassPanel(const CBox& box, int round, double scale, double k = 1, int sliceThickness = 0);
 
 PHLMONITOR currentMonitor();
 

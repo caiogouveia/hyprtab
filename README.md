@@ -2,13 +2,18 @@
 
 <p align="center"><img src="docs/preview.png" alt="Prévia do switcher do hyprtab" width="783"></p>
 
-Alt+Tab estilo macOS para o Hyprland, em **um único plugin `.so`** (C++). Pensado para **0.52 até 0.57+**; só a 0.57 foi compilada até agora (veja [Status](#status)).
+Alt+Tab inspirado no do macOS para o Hyprland, em **um único plugin `.so`** (C++). Pensado para **0.52 até 0.57+**; só a 0.57 foi compilada até agora (veja [Status](#status)).
 
 - Alt+Tab / Alt+Shift+Tab alternam entre as janelas por uso recente (MRU).
 - Barra central com os ícones dos apps, desenhada pelo próprio compositor.
 - Soltar o Alt confirma.
 
-No mesmo repositório: **[hyprdock](dock/README.md)**, uma dock estilo macOS com o mesmo visual.
+No mesmo repositório, com o mesmo visual:
+
+- **[hyprdock](dock/README.md)**: dock inspirada na do macOS.
+- **[hyprmenu](menubar/README.md)**: barra de menus global inspirada na do macOS, com os menus do app em foco.
+- **[hyprpager](pager/README.md)**: pager de workspaces no estilo dos temas metálicos clássicos do Enlightenment.
+- **[hyprfind](find/README.md)**: busca rápida inspirada no Spotlight (apps, janelas abertas, arquivos e contas).
 
 ## Teclas e mouse (com o switcher aberto)
 
@@ -101,3 +106,7 @@ Este projeto foi desenvolvido com a ajuda de IA ([Claude Code](https://claude.co
 ## Licença
 
 [MIT](LICENSE)
+
+## Marcas
+
+macOS, OS X e Spotlight são marcas registradas da Apple Inc., citadas aqui só para descrever a inspiração. Este projeto não tem afiliação com a Apple nem é endossado por ela, e não usa código, ícones, fontes ou outros recursos da Apple.
