@@ -14,3 +14,27 @@ description = "Dock com zoom para o Hyprland"
 authors = ["caio"]
 output = "plugins/dock/hyprdock.so"
 build = ["make -C plugins/dock all"]
+
+[hyprmenu]
+description = "Barra de menus global para o Hyprland"
+authors = ["caio"]
+output = "plugins/menubar/hyprmenu.so"
+build = ["make -C plugins/menubar all"]
+
+[hyprpager]
+description = "Pager de workspaces para o Hyprland"
+authors = ["caio"]
+output = "plugins/pager/hyprpager.so"
+build = ["make -C plugins/pager all"]
+
+[hyprfind]
+description = "Busca rápida (apps, janelas, arquivos) para o Hyprland"
+authors = ["caio"]
+output = "plugins/find/hyprfind.so"
+build = ["make -C plugins/find all"]
+
+[hyprborders]
+description = "Bordas e sombras das janelas para o Hyprland"
+authors = ["caio"]
+output = "plugins/borders/hyprborders.so"
+build = ["make -C plugins/borders all"]
