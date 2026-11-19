@@ -1,0 +1,84 @@
+{
+  "name": "Google Chrome / Chromium",
+  "source": "Atalhos do Chrome no Linux: https://support.google.com/chrome/answer/157179",
+  "match": ["google-chrome", "google-chrome-stable", "google-chrome-beta", "google-chrome-unstable", "chromium", "chromium-browser"],
+  "menus": [
+    {"label": "Arquivo", "items": [
+      {"label": "Nova Guia", "keys": "Ctrl+T"},
+      {"label": "Nova Janela", "keys": "Ctrl+N"},
+      {"label": "Nova Janela Anônima", "keys": "Ctrl+Shift+N"},
+      {"label": "Reabrir Guia Fechada", "keys": "Ctrl+Shift+T"},
+      "-",
+      {"label": "Abrir Arquivo…", "keys": "Ctrl+O"},
+      {"label": "Abrir Local…", "keys": "Ctrl+L"},
+      "-",
+      {"label": "Fechar Guia", "keys": "Ctrl+W"},
+      {"label": "Fechar Janela", "keys": "Ctrl+Shift+W"},
+      "-",
+      {"label": "Salvar Página Como…", "keys": "Ctrl+S"},
+      {"label": "Imprimir…", "keys": "Ctrl+P"},
+      "-",
+      {"label": "Sair do Chrome", "keys": "Ctrl+Shift+Q"}
+    ]},
+    {"label": "Editar", "items": [
+      {"label": "Desfazer", "keys": "Ctrl+Z"},
+      {"label": "Refazer", "keys": "Ctrl+Shift+Z"},
+      "-",
+      {"label": "Recortar", "keys": "Ctrl+X"},
+      {"label": "Copiar", "keys": "Ctrl+C"},
+      {"label": "Colar", "keys": "Ctrl+V"},
+      {"label": "Colar sem Formatação", "keys": "Ctrl+Shift+V"},
+      {"label": "Selecionar Tudo", "keys": "Ctrl+A"},
+      "-",
+      {"label": "Localizar…", "keys": "Ctrl+F"},
+      {"label": "Localizar Próxima", "keys": "Ctrl+G"},
+      {"label": "Localizar Anterior", "keys": "Ctrl+Shift+G"}
+    ]},
+    {"label": "Visualizar", "items": [
+      {"label": "Tela Cheia", "keys": "F11"},
+      "-",
+      {"label": "Recarregar Esta Página", "keys": "Ctrl+R"},
+      {"label": "Recarregar Ignorando o Cache", "keys": "Ctrl+Shift+R"},
+      "-",
+      {"label": "Aumentar Zoom", "keys": "Ctrl+="},
+      {"label": "Diminuir Zoom", "keys": "Ctrl+-"},
+      {"label": "Tamanho Real", "keys": "Ctrl+0"},
+      "-",
+      {"label": "Desenvolvedor", "items": [
+        {"label": "Ferramentas do Desenvolvedor", "keys": "Ctrl+Shift+I"},
+        {"label": "Console JavaScript", "keys": "Ctrl+Shift+J"},
+        {"label": "Ver Código-Fonte", "keys": "Ctrl+U"}
+      ]}
+    ]},
+    {"label": "Histórico", "items": [
+      {"label": "Voltar", "keys": "Alt+Left"},
+      {"label": "Avançar", "keys": "Alt+Right"},
+      {"label": "Página Inicial", "keys": "Alt+Home"},
+      "-",
+      {"label": "Mostrar Histórico Completo", "keys": "Ctrl+H"},
+      {"label": "Downloads", "keys": "Ctrl+J"},
+      {"label": "Limpar Dados de Navegação…", "keys": "Ctrl+Shift+Del"}
+    ]},
+    {"label": "Favoritos", "items": [
+      {"label": "Adicionar Página aos Favoritos…", "keys": "Ctrl+D"},
+      {"label": "Adicionar Todas as Guias aos Favoritos…", "keys": "Ctrl+Shift+D"},
+      "-",
+      {"label": "Gerenciador de Favoritos", "keys": "Ctrl+Shift+O"},
+      {"label": "Mostrar Barra de Favoritos", "keys": "Ctrl+Shift+B"}
+    ]},
+    {"label": "Guia", "items": [
+      {"label": "Próxima Guia", "keys": "Ctrl+Tab"},
+      {"label": "Guia Anterior", "keys": "Ctrl+Shift+Tab"},
+      "-",
+      {"label": "Primeira Guia", "keys": "Ctrl+1"},
+      {"label": "Última Guia", "keys": "Ctrl+9"}
+    ]},
+    {"label": "Janela", "items": [
+      {"label": "Gerenciador de Tarefas", "keys": "Shift+Esc"},
+      {"label": "Mostrar Menu do Chrome", "keys": "Alt+F"}
+    ]},
+    {"label": "Ajuda", "items": [
+      {"label": "Central de Ajuda", "keys": "F1"}
+    ]}
+  ]
+}

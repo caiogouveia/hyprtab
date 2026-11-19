@@ -31,3 +31,9 @@ motif/hyprmotif.so
 motif/tests/run
 motif/tools/preview
 motif/preview.png
+
+# testes e binários gerados
+**/tests/run
+**/tests/run.dSYM/
+*.so
+themes/cursors/build/
