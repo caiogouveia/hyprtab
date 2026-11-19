@@ -19,6 +19,19 @@ core.*
 # Claude Code (config local)
 .claude/settings.local.json
 
+# testes
+tests/run
+
+# dock
+dock/hyprdock.so
+dock/tests/run
+
+# motif
+motif/hyprmotif.so
+motif/tests/run
+motif/tools/preview
+motif/preview.png
+
 # testes e binários gerados
 **/tests/run
 **/tests/run.dSYM/

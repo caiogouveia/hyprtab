@@ -12,6 +12,14 @@ build = ["make -C plugins/hyprtab all"]
 [hyprdock]
 description = "Dock com zoom para o Hyprland"
 authors = ["caio"]
+output = "dock/hyprdock.so"
+build = ["make -C dock all"]
+
+[hyprmotif]
+description = "Molduras estilo Motif/mwm para o Hyprland"
+authors = ["caio"]
+output = "motif/hyprmotif.so"
+build = ["make -C motif all"]
 output = "plugins/dock/hyprdock.so"
 build = ["make -C plugins/dock all"]
 

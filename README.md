@@ -6,6 +6,7 @@ Conjunto de plugins para o Hyprland, todos em C++ (um `.so` por plugin) e com o 
 
 ## Plugins
 
+No mesmo repositório: **[hyprdock](dock/README.md)**, uma dock estilo macOS com o mesmo visual, e **[hyprmotif](motif/README.md)**, molduras estilo Motif/mwm (como o hyprbars, mas no visual do Motif; ainda não testado).
 Cada plugin é um `.so` independente, com o mesmo visual de vidro. Carregue só os que quiser.
 
 | Plugin | O que faz | Pasta | Atalho / dispatcher |
