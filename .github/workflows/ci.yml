@@ -7,6 +7,17 @@ on:
   workflow_call:  # reaproveitado pelo release.yml
 
 jobs:
+  # Testes do modelo de cada plugin: não dependem do Hyprland, então rodam
+  # direto no Ubuntu (com ASan/UBSan) sem instalar o Arch. Dá feedback rápido.
+  tests:
+    name: Testes (sem Hyprland)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Testar plugins
+        run: make test
+
   build:
     name: Hyprland ${{ matrix.label }}
     runs-on: ubuntu-latest
