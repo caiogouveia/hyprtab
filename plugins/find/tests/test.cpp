@@ -3,6 +3,7 @@
 #include "../src/files.hpp"
 #include "../src/model.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>

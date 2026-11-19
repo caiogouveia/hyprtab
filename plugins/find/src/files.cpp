@@ -18,6 +18,44 @@
 
 extern char** environ;
 
+// Portabilidade: no Linux usa as chamadas atômicas; no macOS/BSD emula com fcntl.
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0 // sem a flag: o SIGPIPE é evitado com SO_NOSIGPIPE no socket (abaixo)
+#endif
+
+static void setCloexec(int fd) {
+    fcntl(fd, F_SETFD, fcntl(fd, F_GETFD) | FD_CLOEXEC);
+}
+
+static int cloexecSocketpair(int sv[2]) {
+#ifdef SOCK_CLOEXEC
+    return socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, sv);
+#else
+    if (socketpair(AF_UNIX, SOCK_STREAM, 0, sv) != 0)
+        return -1;
+    setCloexec(sv[0]);
+    setCloexec(sv[1]);
+#ifdef SO_NOSIGPIPE
+    const int one = 1;
+    setsockopt(sv[0], SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+    setsockopt(sv[1], SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+#endif
+    return 0;
+#endif
+}
+
+static int cloexecPipe(int fds[2]) {
+#ifdef __linux__
+    return pipe2(fds, O_CLOEXEC);
+#else
+    if (pipe(fds) != 0)
+        return -1;
+    setCloexec(fds[0]);
+    setCloexec(fds[1]);
+    return 0;
+#endif
+}
+
 namespace fs = std::filesystem;
 
 namespace hf {
@@ -98,9 +136,9 @@ std::optional<std::vector<std::string>> fzfFilter(const std::string& fzf, const 
                                                   const std::function<bool()>& cancelled) {
     // stdin por socket (send com MSG_NOSIGNAL: se o fzf sair antes, nada de SIGPIPE no compositor)
     int in[2], out[2];
-    if (socketpair(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0, in) != 0)
+    if (cloexecSocketpair(in) != 0)
         return std::nullopt;
-    if (pipe2(out, O_CLOEXEC) != 0) {
+    if (cloexecPipe(out) != 0) {
         close(in[0]);
         close(in[1]);
         return std::nullopt;
