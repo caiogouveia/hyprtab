@@ -40,7 +40,21 @@ Os `.so` saem em `plugins/<nome>/`:
 | hyprfind | `plugins/find/hyprfind.so` |
 | hyprborders | `plugins/borders/hyprborders.so` |
 
-Sem `librsvg`, só ícones PNG funcionam; sem ícone aparece um círculo com a inicial do app. Também dá para carregar com `hyprctl plugin load /caminho/para/x.so` ou `hyprpm`.
+Sem `librsvg`, só ícones PNG funcionam; sem ícone aparece um círculo com a inicial do app. Também dá para carregar com `hyprctl plugin load /caminho/para/x.so`.
+
+### Com o hyprpm
+
+O `hyprpm` compila contra os headers da **sua** versão do Hyprland, então evita o problema de usar um `.so` de outra versão:
+
+```sh
+hyprpm update
+hyprpm add https://github.com/caiogouveia/hyprtab
+hyprpm enable hyprtab     # ou hyprdock, hyprmenu, hyprpager, hyprfind, hyprborders
+```
+
+### Binários prontos
+
+Cada release traz um `.so` por plugin e por versão do Hyprland (`hyprtab-hyprland0.57.2.so`), mais o `SHA256SUMS`. Use o que corresponde exatamente à saída de `hyprctl version`; versões que não compilam ficam de fora da release.
 
 ## Exemplo de config
 
@@ -178,7 +192,7 @@ Na 0.57+ `hyprctl dispatch` aceita expressões Lua; o foco tenta o formato legad
 
 - [x] Compila contra os headers reais do Hyprland 0.57.2
 - [x] Compila e roda no Hyprland 0.53.3 (Ubuntu 26.04)
-- [ ] 0.52, 0.54 – 0.56: o código tem ramos para elas (lidos dos headers), mas **nunca foram compilados**
+- [ ] 0.52, 0.54 – 0.56: o código tem ramos para elas (lidos dos headers). O CI compila cada uma (experimentais, não quebram o build); veja o resultado na aba Actions
 
 ## Feito com IA
 
